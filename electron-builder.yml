@@ -1,0 +1,48 @@
+appId: io.glmwebrtc.app
+productName: GLMWebrtc
+copyright: Copyright © 2026 glmwebrtc
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.{map,ts,tsx}'
+asar: true
+asarUnpack:
+  - resources/**
+# ponytail: code signing placeholders — fill CSC_LINK/CSC_KEY_PASSWORD env vars before release
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+  category: Network
+  icon: build/icon.png
+  maintainer: glmwebrtc
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.icns
+  category: public.app-category.business
+# ponytail: auto-update provider placeholder. Set GH_TOKEN + repo before publishing.
+publish:
+  provider: github
+  owner: glmwebrtc
+  repo: glmwebrtc
+  releaseType: release
+npmRebuild: false

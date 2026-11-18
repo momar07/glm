@@ -1,0 +1,19 @@
+node_modules
+out
+dist
+dist-web
+release
+*.log
+.DS_Store
+.vscode
+.idea
+.env
+.env.*
+!.env.example
+build/icons/*
+
+# Android build artifacts / signing material
+android/.kotlin
+*.jks
+*.keystore
+google-services.json
