@@ -79,6 +79,23 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     getMainWindow()?.minimize();
   });
 
+  // The renderer measures its own content and asks for the window to hug it
+  // (bar-only height when idle, taller with a drawer open). Anchor the top
+  // edge: keep x/y, change only the size.
+  ipcMain.handle(IPC.WIN_SET_SIZE, (_e, size: unknown) => {
+    if (!isObject(size) || typeof size.height !== 'number') throw new Error('invalid size');
+    const w = getMainWindow();
+    if (!w) return;
+    const height = Math.round(Math.min(1400, Math.max(56, size.height)));
+    const cur = w.getBounds();
+    const width =
+      typeof size.width === 'number'
+        ? Math.round(Math.min(900, Math.max(360, size.width)))
+        : cur.width;
+    if (width === cur.width && height === cur.height) return;
+    w.setBounds({ x: cur.x, y: cur.y, width, height });
+  });
+
   ipcMain.handle(IPC.APP_LAUNCH_AT_STARTUP, (_e, enabled: boolean) => {
     app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
   });

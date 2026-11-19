@@ -96,6 +96,7 @@ export function createWebApi(): MainApi {
     // No-ops on web — related buttons are hidden via isNativeShell.
     quit: async () => {},
     minimize: async () => {},
+    setWindowSize: async () => {},
     setLaunchAtStartup: async () => {},
     // CSV picking needs a file input; Contacts.tsx branches on isNativeShell.
     openCsv: async () => null,

@@ -3,7 +3,7 @@ import { HashRouter } from 'react-router-dom';
 import App from './App';
 import { createWebApi } from './lib/webApi';
 import { initPush } from './lib/push';
-import { isNative } from './lib/platform';
+import { isNative, isNativeShell } from './lib/platform';
 import { StatusBar as CapStatusBar, Style } from '@capacitor/status-bar';
 import type { MainApi } from '@shared/types';
 import './index.css';
@@ -12,6 +12,12 @@ import './index.css';
 // browser-backed shim so every window.api call site works unchanged.
 if (typeof (window as unknown as { api?: unknown }).api === 'undefined') {
   (window as unknown as { api: MainApi }).api = createWebApi();
+}
+
+// Electron desktop shell: the window is frameless + transparent and the
+// phonebar floats, so the page itself must not paint a background.
+if (isNativeShell) {
+  document.body.classList.add('shell-transparent');
 }
 
 if (isNative()) {

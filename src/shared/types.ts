@@ -190,6 +190,7 @@ export const IPC = {
   NOTIFY: 'notify:show',
   APP_QUIT: 'app:quit',
   APP_MINIMIZE: 'app:minimize',
+  WIN_SET_SIZE: 'win:set-size',
   APP_LAUNCH_AT_STARTUP: 'app:launch-at-startup',
   DIALOG_OPEN_CSV: 'dialog:open-csv',
   DIALOG_SAVE_CSV: 'dialog:save-csv',
@@ -223,6 +224,9 @@ export interface MainApi {
   notify(opts: NotifyOptions): Promise<void>;
   quit(): Promise<void>;
   minimize(): Promise<void>;
+  // Resize the frameless window so it hugs the rendered shell (bar + any
+  // open drawer). Height is required; width optional (login card vs bar).
+  setWindowSize(size: { width?: number; height: number }): Promise<void>;
   setLaunchAtStartup(enabled: boolean): Promise<void>;
   openCsv(): Promise<string | null>;
   saveCsv(defaultName: string): Promise<string | null>;

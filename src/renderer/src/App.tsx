@@ -1,23 +1,15 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useSettings } from './store/settings';
 import { useSip } from './store/sip';
 import { sipEngine } from './sip/engine';
 import { audioManager } from './audio/AudioManager';
 import { onForeground } from './lib/lifecycle';
-import { StatusBar } from './components/StatusBar';
+import { useWindowFit } from './lib/useWindowFit';
+import { PhoneBar } from './components/PhoneBar';
 import { BatteryPrompt } from './components/BatteryPrompt';
 import { Login } from './components/Login';
-import { CallsPage } from './components/CallsPage';
-import { TabBar } from './components/TabBar';
-import { CallView } from './components/CallView';
 import { IncomingCall } from './components/IncomingCall';
-import { Settings } from './components/Settings';
-import { Contacts } from './components/Contacts';
-import { Logs } from './components/Logs';
-import { useCall } from './store/call';
 import { useAgent } from './store/agent';
-import { AgentPanel } from './components/AgentPanel';
 import { logger } from './lib/logger';
 
 export default function App(): React.ReactElement {
@@ -27,8 +19,6 @@ export default function App(): React.ReactElement {
   const presence = useSip((s) => s.presence);
   const connect = useSip((s) => s.connect);
   const disconnect = useSip((s) => s.disconnect);
-  const navigate = useNavigate();
-  const calls = useCall((s) => s.calls);
 
   // Callback ref — fires on every mount/unmount of the audio element.
   // Critical: App.tsx renders <audio> in two separate conditional branches
@@ -111,12 +101,11 @@ export default function App(): React.ReactElement {
 
   const online = presence === 'online' || presence === 'on-call';
   const engineState = useSip((s) => s.engineState);
-  const hasActiveCall = calls.some((c) => c.status === 'in-call' || c.status === 'held');
-  const hasRingingOut = calls.some(
-    (c) => c.direction === 'outgoing' && (c.status === 'ringing' || c.status === 'connecting'),
-  );
-  // Joining: answer pressed, ACK/DTLS still in flight (set optimistically by answer()).
-  const hasJoining = calls.some((c) => c.status === 'connecting');
+  // The frameless window hugs whatever shell is on screen: the compact
+  // login card (~420 wide) or the phonebar (780 wide), bar-height when no
+  // drawer is open. See lib/useWindowFit.
+  const fit = useWindowFit(online ? 780 : 420);
+  const fitRef = fit.ref;
 
   if (!loaded) {
     return (
@@ -159,31 +148,37 @@ export default function App(): React.ReactElement {
         </div>
       );
     }
+    // Compact login: the window shrinks to hug this ~380px card (useWindowFit
+    // measures the wrapper), no wide glass panel around it. The X quits the
+    // app — the frameless window has no title bar to close it with.
     return (
-      <div className="h-full">
+      <div ref={fitRef} className="w-full flex justify-center px-3 pt-3 pb-3">
         <audio ref={setAudioRef} id="remoteAudio" autoPlay playsInline />
-        <Login onConnected={() => navigate('/')} />
+        <div className="relative w-[380px] max-w-full rounded-3xl bg-[#0f172a]/95 backdrop-blur-2xl border border-[#1e293b] overflow-hidden">
+          <button
+            onClick={() => void window.api.quit()}
+            className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full bg-slate-800/80 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-slate-700/70 flex items-center justify-center text-xs transition"
+            title="Close / Exit"
+          >
+            ✕
+          </button>
+          <Login onConnected={() => {}} />
+        </div>
       </div>
     );
   }
 
+  // Floating phonebar shell: ONLY the slim pill bar lives here — no
+  // permanent panel underneath. Everything else (keypad, logs, contacts,
+  // settings, queues, transfer) unfolds as a drawer from the bar, and the
+  // window grows/shrinks with it via useWindowFit. On desktop the window is
+  // transparent, so the bar floats over whatever is behind the app.
   return (
-    <div className="h-full flex flex-col pb-[env(safe-area-inset-bottom)]">
+    <div ref={fitRef} className="w-full flex flex-col items-center px-3 pt-3 pb-3 pb-[env(safe-area-inset-bottom)]">
       <audio ref={setAudioRef} id="remoteAudio" autoPlay playsInline />
-      <StatusBar />
+      <PhoneBar onFitRequest={fit.fitNow} />
       <BatteryPrompt />
-      <div className="flex-1 overflow-hidden relative">
-        <Routes>
-          <Route path="/" element={hasActiveCall || hasRingingOut || hasJoining ? <CallView /> : <CallsPage />} />
-          <Route path="/contacts" element={<Contacts />} />
-          <Route path="/agent" element={<AgentPanel />} />
-          <Route path="/history" element={<Navigate to="/" replace />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-        <IncomingCall />
-      </div>
-      <TabBar />
+      <IncomingCall />
     </div>
   );
 }

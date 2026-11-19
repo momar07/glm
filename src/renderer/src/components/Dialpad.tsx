@@ -40,7 +40,9 @@ export interface Dialer {
 // Editing is caret-aware: keys/paste insert where the cursor sits, so a digit
 // can be added in the middle of the number. The caret is tracked on every
 // selection change (tap or arrow keys), not just on focus.
-export function useDialer(): Dialer {
+// `enabled` gates the global keyboard listener: two mounted dialers (page
+// sheet + phonebar drawer) must never both answer the same keystrokes.
+export function useDialer(enabled = true): Dialer {
   const [value, setValue] = useState('');
   // Paste fallback: Android WebView denies clipboard.readText(), so the field
   // is briefly made editable for a native long-press paste (see below).
@@ -134,6 +136,7 @@ export function useDialer(): Dialer {
 
   // Keyboard shortcuts: 0-9*# type, Enter dials, Backspace deletes, Esc clears.
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'Enter') {
@@ -156,7 +159,7 @@ export function useDialer(): Dialer {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, online]);
+  }, [value, online, enabled]);
 
   return { value, setNumber: setValue, press, backspace, clear, call, pasteFromClipboard, trackSelect, pasteMode, endPasteMode, online, inputRef };
 }

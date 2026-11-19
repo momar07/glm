@@ -72,8 +72,8 @@ export function AgentLogin({
   };
 
   return (
-    <div className="h-full overflow-y-auto no-scrollbar p-4 flex flex-col items-center">
-      <div className="w-full max-w-md space-y-3 my-auto">
+    <div className="p-3 flex flex-col items-center">
+      <div className="w-full space-y-2.5">
         <header className="text-center">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white text-xl font-bold shadow-lg shadow-brand-600/30">
             G
@@ -84,7 +84,7 @@ export function AgentLogin({
 
         <ModeSwitch mode="agent" onChange={(m) => m === 'sip' && onSwitchMode()} />
 
-        <Card className="p-4 space-y-3">
+        <Card className="p-3 space-y-3">
           <Field label="Middleware URL">
             <Input
               value={apiUrl}

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { App as CapApp } from '@capacitor/app';
 import { useSettings } from '../store/settings';
 import { useSip } from '../store/sip';
-import { useAgent } from '../store/agent';
 import { isNative, isNativeShell } from '../lib/platform';
 import { Button, Input, Field, Card, Toggle } from './ui';
 import { ModeSwitch, type LoginMode } from './ModeSwitch';
@@ -49,10 +48,10 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [form, setForm] = useState<SipProfile>(blankProfile());
-  // An agent deployment should open on the agent form; plain SIP stays the default.
-  const [mode, setMode] = useState<LoginMode>(() =>
-    isNativeShell && useAgent.getState().username ? 'agent' : 'sip',
-  );
+  // "Call center agent" is the default tab on startup in the desktop shell;
+  // the user can still switch to a plain SIP account. Web keeps SIP first
+  // (agent mode needs the desktop middleware bridge).
+  const [mode, setMode] = useState<LoginMode>(() => (isNativeShell ? 'agent' : 'sip'));
 
   useEffect(() => {
     if (editing) setForm(editing);
@@ -105,8 +104,8 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
   }
 
   return (
-    <div className="h-full overflow-y-auto no-scrollbar p-4 flex flex-col items-center">
-      <div className="w-full max-w-md space-y-3 my-auto">
+    <div className="p-3 flex flex-col items-center">
+      <div className="w-full space-y-2.5">
         <header className="text-center">
           <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white text-xl font-bold shadow-lg shadow-brand-600/30">
             G
@@ -159,7 +158,7 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
           </Card>
         )}
 
-        <Card className="p-4 space-y-3">
+        <Card className="p-3 space-y-3">
           <Field label="Profile label">
             <Input value={form.label} onChange={(e) => set('label', e.target.value)} placeholder="Office / Issabel" />
           </Field>

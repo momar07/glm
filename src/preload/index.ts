@@ -15,6 +15,7 @@ const api: MainApi = {
   notify: (opts) => ipcRenderer.invoke(IPC.NOTIFY, opts),
   quit: () => ipcRenderer.invoke(IPC.APP_QUIT),
   minimize: () => ipcRenderer.invoke(IPC.APP_MINIMIZE),
+  setWindowSize: (size) => ipcRenderer.invoke(IPC.WIN_SET_SIZE, size),
   setLaunchAtStartup: (enabled) => ipcRenderer.invoke(IPC.APP_LAUNCH_AT_STARTUP, enabled),
   openCsv: () => ipcRenderer.invoke(IPC.DIALOG_OPEN_CSV),
   saveCsv: (defaultName) => ipcRenderer.invoke(IPC.DIALOG_SAVE_CSV, defaultName),
