@@ -117,13 +117,14 @@ export const useCall = create<CallState>((set, get) => {
   },
 
   async makeCall(target) {
-    await ensureMic(); // system mic dialog before getUserMedia, not after a failed invite
+    // the native engine owns the microphone: the page must not open it
+    if (sipEngine.mode !== 'native') await ensureMic(); // system mic dialog before getUserMedia
     const id = await sipEngine.makeCall(target);
     set({ currentId: id });
     return id;
   },
   async answer(id) {
-    await ensureMic();
+    if (sipEngine.mode !== 'native') await ensureMic();
     await sipEngine.answer(id);
   },
   async reject(id) {

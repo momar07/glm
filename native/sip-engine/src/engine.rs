@@ -428,6 +428,11 @@ fn register(
     server: &mut String,
 ) -> Result<(), String> {
     unsafe {
+        // a second register (a reload of the window, a profile switch) must
+        // not leave the old account of this helper alive
+        if let Some(old) = account.take() {
+            pjsua_acc_del(old);
+        }
         // the transport of the signalling, the local port is free
         let mut transport_config: pjsua_transport_config = std::mem::zeroed();
         pjsua_transport_config_default(&mut transport_config);

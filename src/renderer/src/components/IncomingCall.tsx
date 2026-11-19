@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { sameCaller, crmPopIsFresh } from '@shared/agent';
 import { useCall } from '../store/call';
+import { sipEngine } from '../sip/engine';
 import { useSettings } from '../store/settings';
 import { useAgent } from '../store/agent';
 import { audioManager } from '../audio/AudioManager';
@@ -44,7 +45,7 @@ export function IncomingCall(): React.ReactElement {
     }
     // the native engine rings inside the helper: the renderer must not open
     // the audio device, the two would fight over the speakers
-    if (profile?.engine !== 'native') {
+    if (sipEngine.mode !== 'native') {
       audioManager.startRingtone(audio.ringtone, audio.ringtoneVolume, audio.ringtoneDeviceId);
       setRingMode(); // loud ring like a real call (native only; no-op on web)
       // Device ringtone wins over the synth when the user picked one.

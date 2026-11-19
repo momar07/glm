@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { SipProfile } from '@shared/types';
 import { useAgent } from '../store/agent';
 import { useSip } from '../store/sip';
@@ -26,6 +26,18 @@ export function AgentLogin({
   const [wsPort, setWsPort] = useState(DEFAULT_WS_PORT);
   const [crmBaseUrl, setCrmBaseUrl] = useState(agent.crmBaseUrl);
   const [trustCert, setTrustCert] = useState(agent.trustCert);
+  // the native engine is a Windows helper; where it is missing the option is
+  // hidden and WebRTC (WSS) is the engine
+  const [nativeAvailable, setNativeAvailable] = useState(false);
+  const [engine, setEngine] = useState<'native' | 'webrtc' | null>(null);
+  const activeEngine = engine ?? (nativeAvailable ? 'native' : 'webrtc');
+
+  useEffect(() => {
+    void window.api
+      .sipAvailable()
+      .then(setNativeAvailable)
+      .catch(() => setNativeAvailable(false));
+  }, []);
 
   const busy = agent.loggingIn || connecting;
   const ready = apiUrl.trim() !== '' && username.trim() !== '' && password !== '';
@@ -36,6 +48,7 @@ export function AgentLogin({
     const p = useAgent.getState().profile;
     if (!p) return;
     const domain = p.domain || p.server;
+    const native = activeEngine === 'native';
     const profile: SipProfile = {
       id: `agent:${p.extension}`,
       label: `Agent ${p.extension}`,
@@ -46,6 +59,9 @@ export function AgentLogin({
       wsUrl: buildWsUrl(domain, wsPort),
       autoWsUrl: true,
       wsPort,
+      engine: native ? 'native' : 'webrtc',
+      sipPort: p.port || 5060,
+      transport: 'udp',
     };
     try {
       await connect(profile, settings);
@@ -107,21 +123,36 @@ export function AgentLogin({
                 spellCheck={false}
               />
             </Field>
-            <Field label="WSS port">
-              <Input
-                value={wsPort}
-                onChange={(e) => setWsPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                placeholder={DEFAULT_WS_PORT}
-                inputMode="numeric"
-                className="font-mono text-xs text-center"
-              />
-            </Field>
+            {activeEngine === 'webrtc' ? (
+              <Field label="WSS port">
+                <Input
+                  value={wsPort}
+                  onChange={(e) => setWsPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  placeholder={DEFAULT_WS_PORT}
+                  inputMode="numeric"
+                  className="font-mono text-xs text-center"
+                />
+              </Field>
+            ) : (
+              <Field label="SIP port">
+                <div className="h-9 flex items-center justify-center rounded-lg bg-slate-800/60 text-xs font-mono text-slate-400">
+                  from middleware
+                </div>
+              </Field>
+            )}
           </div>
           <Toggle
             checked={trustCert}
             onChange={setTrustCert}
             label="Trust this server's certificate (self-signed PBX)"
           />
+          {nativeAvailable && (
+            <Toggle
+              checked={activeEngine === 'native'}
+              onChange={(v) => setEngine(v ? 'native' : 'webrtc')}
+              label="Native SIP engine (UDP, G.729, audio in the helper)"
+            />
+          )}
 
           {agent.loginError && (
             <div className="text-xs rounded-lg px-3 py-2 bg-danger-600/20 text-danger-500 border border-danger-600/40">

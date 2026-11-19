@@ -6,7 +6,10 @@ branch `Microsip_v1`, commit `4014ea8`) into GLMWebrtc, plus a **native SIP
 
 Status: **P1 done** (agent clone: login, status, queues, CRM pop, TLS trust).
 **P2 done** (native engine: the pjsua helper, the facade, the engine switch).
-Phase P3 (integration: agent login builds the native profile, the mock→live test) next.
+**P3 code done** (the engine toggle in the agent login, the helper-presence
+fallback, no renderer ringtone/mic on a native call, the helper stopped on a
+window reload). **Left: the live run (a)** with a spare extension — needs the
+operator password.
 
 ---
 
@@ -336,11 +339,17 @@ Call ids are strings in both modes: `"sipjs:<id>"` / `"native:<id>"`.
 9. `src/main/sipHelper.ts`, `src/main/sipBridge.ts`.
 10. `src/renderer/src/sip/engine.ts` — the facade; `store/call.ts` one-liner.
 
-**P3**
+**P3** (code done 2026-11-19: the engine toggle in `AgentLogin` shown only when
+`sip:available`, WebRTC as the default elsewhere, the native profile
+(`engine`/`sipPort`/`transport: udp`), the renderer ringtone and `ensureMic`
+skipped when `sipEngine.mode === 'native'`, the agent logout also disconnects
+SIP, the helper disposed on a window reload, a second register deletes the old
+pjsua account. Checks: sipHelper 5/5, agent 66/66, typecheck/lint/build/build:web.)
 
-11. the helper-presence check and the mode default.
-12. the hermetic run against the mock middleware.
-13. the live run against a spare extension.
+11. ~~the helper-presence check and the mode default~~ done.
+12. ~~the hermetic run against the mock middleware~~ done (P1: 10/10).
+13. the live run against a spare extension (a) — **blocked on the operator
+    password**.
 
 ---
 

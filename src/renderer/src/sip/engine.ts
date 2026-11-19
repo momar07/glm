@@ -56,6 +56,11 @@ class Engine {
     return this.backend === 'native' ? this.native : webrtc;
   }
 
+  // the engine actually in use (a missing helper falls back to WebRTC)
+  get mode(): 'webrtc' | 'native' {
+    return this.backend;
+  }
+
   get state(): SipServiceState {
     return this.current.state;
   }

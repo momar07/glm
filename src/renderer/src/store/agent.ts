@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { parseWsUrl } from '@shared/agent';
 import type { AgentPopEvent, AgentProfile, AgentState } from '@shared/types';
 import { logger } from '../lib/logger';
+import { useSip } from './sip';
 
 const FORM_KEY = 'glmwebrtc:agent-form';
 
@@ -147,6 +148,8 @@ export const useAgent = create<AgentStore>((set, get) => {
 
     async logout() {
       set({ actionError: null });
+      // the SIP registration of the agent goes with the agent session
+      await useSip.getState().disconnect().catch(() => {});
       await window.api.agentLogout().catch(() => {});
       set({ state: BLANK_STATE, profile: null, pop: null });
       logger.info('agent', 'logged out');

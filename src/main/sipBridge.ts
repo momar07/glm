@@ -18,6 +18,18 @@ export function registerSipIpc(getMainWindow: () => BrowserWindow | null): void 
     { log: (level, message) => mainLog(level, 'sip', message) },
   );
 
+  // A reload of the window loses every listener: the helper is stopped so an
+  // incoming call cannot ring for a page that is not there. The next login
+  // starts a fresh process.
+  let loaded = false;
+  const webContents = getMainWindow()?.webContents;
+  webContents?.on('did-finish-load', () => {
+    loaded = true;
+  });
+  webContents?.on('did-start-loading', () => {
+    if (loaded) helper?.dispose();
+  });
+
   ipcMain.handle(IPC.SIP_AVAILABLE, () => helper?.available() ?? false);
   ipcMain.handle(IPC.SIP_COMMAND, (_e, command: unknown) => {
     if (!isCommand(command)) throw new Error('invalid sip command');
@@ -26,6 +38,6 @@ export function registerSipIpc(getMainWindow: () => BrowserWindow | null): void 
 }
 
 export function shutdownSip(): void {
+  // the instance stays: `available()` must keep working after a dispose
   helper?.dispose();
-  helper = null;
 }
