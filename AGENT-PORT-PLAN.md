@@ -8,8 +8,10 @@ Status: **P1 done** (agent clone: login, status, queues, CRM pop, TLS trust).
 **P2 done** (native engine: the pjsua helper, the facade, the engine switch).
 **P3 code done** (the engine toggle in the agent login, the helper-presence
 fallback, no renderer ringtone/mic on a native call, the helper stopped on a
-window reload). **Left: the live run (a)** with a spare extension — needs the
-operator password.
+window reload). **Live run (a) done** on 2026-11-19 with `agent2`/1003 (the
+helper under wine, the real middleware): register 200, G.729 negotiated
+(`#0 audio G729 @8kHz, sendrecv`), status_update, CRM pop, hold, hangup.
+1002 has no extension in Issabel — `test` can log in but cannot register.
 
 ---
 
@@ -339,7 +341,13 @@ Call ids are strings in both modes: `"sipjs:<id>"` / `"native:<id>"`.
 9. `src/main/sipHelper.ts`, `src/main/sipBridge.ts`.
 10. `src/renderer/src/sip/engine.ts` — the facade; `store/call.ts` one-liner.
 
-**P3** (code done 2026-11-19: the engine toggle in `AgentLogin` shown only when
+**P3** (code done 2026-11-19; **live run done** 2026-11-19 with `agent2`/1003:
+the helper under wine, SIP REGISTER 200, `#0 audio G729 @8kHz, sendrecv`, the
+status_update echo, a real `crm_screen_pop`, hold (`active:false`), hangup,
+12/12 checks of the one-off driver. Found live: Asterisk answers with its own
+codec order, so a multi-codec offer negotiates PCMU — the engine now offers
+G.729 only; `media.active` now follows the media *state*, not the section
+count, so hold shows in the UI. The engine toggle in `AgentLogin` shown only when
 `sip:available`, WebRTC as the default elsewhere, the native profile
 (`engine`/`sipPort`/`transport: udp`), the renderer ringtone and `ensureMic`
 skipped when `sipEngine.mode === 'native'`, the agent logout also disconnects
@@ -348,8 +356,8 @@ pjsua account. Checks: sipHelper 5/5, agent 66/66, typecheck/lint/build/build:we
 
 11. ~~the helper-presence check and the mode default~~ done.
 12. ~~the hermetic run against the mock middleware~~ done (P1: 10/10).
-13. the live run against a spare extension (a) — **blocked on the operator
-    password**.
+13. ~~the live run against a spare extension (a)~~ done with `agent2`/1003;
+    the Windows box of the operator is the remaining manual pass.
 
 ---
 

@@ -159,9 +159,10 @@ unsafe extern "C" fn on_call_media_state(call_id: pjsua_call_id) {
             }
         }
     }
+    // a held call keeps its media section: the state is what changed
     emit(EngineEvent::Media {
         call_id,
-        active: info.media_cnt > 0,
+        active: info.media_cnt > 0 && info.media[0].status as u32 == PJSUA_CALL_MEDIA_ACTIVE,
     });
 }
 
@@ -213,7 +214,14 @@ pub(crate) fn run(commands: Receiver<Command>, events: Sender<EngineEvent>) {
         let mut logging: pjsua_logging_config = std::mem::zeroed();
         pjsua_logging_config_default(&mut logging);
         logging.level = 5;
-        logging.console_level = 4;
+        // stdout belongs to the JSON-lines protocol of the helper: the log of
+        // pjsua goes to the file of SIP_HELPER_LOG, or nowhere
+        logging.console_level = 0;
+        if let Ok(path) = std::env::var("SIP_HELPER_LOG") {
+            if let Ok(path) = CString::new(path) {
+                logging.log_filename = to_pj_str(&path);
+            }
+        }
 
         let mut media: pjsua_media_config = std::mem::zeroed();
         pjsua_media_config_default(&mut media);
@@ -515,6 +523,9 @@ fn call(
         Ok(call_id)
     }
 }
+
+/// PJSUA_CALL_MEDIA_ACTIVE: both directions of the audio are flowing.
+const PJSUA_CALL_MEDIA_ACTIVE: u32 = 1;
 
 /// The priority of the codecs: the first one of the list wins, the others are
 /// switched off.

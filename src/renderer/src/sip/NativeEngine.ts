@@ -32,9 +32,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// G.729 first: the point of the native engine on a call center LAN, with the
-// narrowband G.711 as the fallback. The helper switches the others off.
-const NATIVE_CODECS = ['G729', 'PCMA', 'PCMU'];
+// G.729 only: Asterisk answers with its own codec order, so offering PCMU as
+// a fallback negotiates PCMU (the endpoint of the box prefers it). A PBX
+// without G.729 fails the call — switch the login to WebRTC there.
+const NATIVE_CODECS = ['G729'];
 
 export class NativeEngine {
   private em = new Emitter();
