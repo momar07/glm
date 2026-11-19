@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CallRecord } from '@shared/types';
 import { historyTs } from '@shared/constants';
-import { sipEngine, type CallSession } from '../sip/SipEngine';
+import { sipEngine, type CallSession } from '../sip/engine';
 import { logger } from '../lib/logger';
 import { useSettings } from './settings';
 import { setNormalAudio } from '../lib/audioRoute';

@@ -1,6 +1,6 @@
 import { app, BrowserWindow, session } from 'electron';
 import { createWindow } from './window';
-import { registerIpc, shutdownAgent } from './ipc';
+import { registerIpc, shutdownAgent, shutdownSipEngine } from './ipc';
 import { fileLogger, mainLog } from './logger';
 import { settingsStore } from './store';
 
@@ -46,5 +46,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   shutdownAgent();
+  shutdownSipEngine();
   mainLog('info', 'main', 'app quitting');
 });

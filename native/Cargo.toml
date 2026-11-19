@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["sip-engine", "sip-helper"]

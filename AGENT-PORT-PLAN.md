@@ -5,7 +5,8 @@ branch `Microsip_v1`, commit `4014ea8`) into GLMWebrtc, plus a **native SIP
 (UDP/TCP) + G.729** engine alongside the existing **WebRTC (WSS)** engine.
 
 Status: **P1 done** (agent clone: login, status, queues, CRM pop, TLS trust).
-Phases P2 (native engine) → P3 (integration) next.
+**P2 done** (native engine: the pjsua helper, the facade, the engine switch).
+Phase P3 (integration: agent login builds the native profile, the mock→live test) next.
 
 ---
 
@@ -328,7 +329,7 @@ Call ids are strings in both modes: `"sipjs:<id>"` / `"native:<id>"`.
 5. `AgentLogin.tsx`, `AgentPanel.tsx`, the CRM card in `IncomingCall.tsx`.
 6. the `certificate-error` handler (D5).
 
-**P2**
+**P2** (done 2026-11-19: `native/` workspace + helper JSON lines + tonegen ringtone, `tools/build-native.sh`, `src/main/{sipHelper,sipBridge}.ts`, `src/renderer/src/sip/{NativeEngine,engine}.ts`, the stores on the facade. Checks: the helper cross-compiles (`resources/sip-helper.exe`, 2.5 MB), `node src/main/sipHelper.contract.test.mjs` 5/5 (answers, events, error answers, garbage lines, crash→re-register), `cargo fmt --check`, typecheck/lint/build/build:web.)
 
 7. `native/` — copy the crate, add the workspace, write `sip-helper`.
 8. `tools/build-native.sh` → `resources/sip-helper.exe`.

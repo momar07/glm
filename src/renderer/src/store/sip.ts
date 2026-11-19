@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Presence, SipProfile, AppSettings } from '@shared/types';
-import { sipEngine, type SipServiceState, type SoftphoneStatus } from '../sip/SipEngine';
+import { sipEngine, type SipServiceState, type SoftphoneStatus } from '../sip/engine';
 import { logger } from '../lib/logger';
 import { startCallService, stopCallService } from '../lib/system';
 import { ensureNotifications } from '../lib/push';

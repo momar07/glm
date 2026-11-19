@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AppSettings, SipProfile } from '@shared/types';
 import { DEFAULT_SETTINGS, genId } from '@shared/constants';
 import { logger } from '../lib/logger';
-import { sipEngine } from '../sip/SipEngine';
+import { sipEngine } from '../sip/engine';
 
 interface SettingsState {
   loaded: boolean;

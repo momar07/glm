@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useSettings } from './store/settings';
 import { useSip } from './store/sip';
-import { sipEngine } from './sip/SipEngine';
+import { sipEngine } from './sip/engine';
 import { audioManager } from './audio/AudioManager';
 import { onForeground } from './lib/lifecycle';
 import { StatusBar } from './components/StatusBar';

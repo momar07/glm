@@ -4,6 +4,7 @@ import type { AgentLoginRequest } from '../shared/types';
 import { settingsStore } from './store';
 import { fileLogger, mainLog } from './logger';
 import { AgentService } from './agent';
+import { registerSipIpc, shutdownSip } from './sipBridge';
 
 // ponytail: per-channel validators as plain guards. Promote to a zod schema if IPC surface grows.
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -36,6 +37,10 @@ let agent: AgentService | null = null;
 export function shutdownAgent(): void {
   agent?.dispose();
   agent = null;
+}
+
+export function shutdownSipEngine(): void {
+  shutdownSip();
 }
 
 export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
@@ -120,6 +125,8 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     if (typeof phone !== 'string') throw new Error('invalid phone');
     return svc.openRecord(phone, typeof uid === 'string' ? uid : '', typeof baseUrl === 'string' ? baseUrl : undefined);
   });
+
+  registerSipIpc(getMainWindow);
 
   ipcMain.handle(IPC.TLS_TRUST_HOST, (_e, host: unknown, trust: unknown) => {
     if (typeof host !== 'string' || !host.trim()) throw new Error('invalid host');

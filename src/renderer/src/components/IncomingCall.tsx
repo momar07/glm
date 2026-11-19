@@ -42,12 +42,16 @@ export function IncomingCall(): React.ReactElement {
       void answer(incoming.id);
       return;
     }
-    audioManager.startRingtone(audio.ringtone, audio.ringtoneVolume, audio.ringtoneDeviceId);
-    setRingMode(); // loud ring like a real call (native only; no-op on web)
-    // Device ringtone wins over the synth when the user picked one.
-    if (isNative() && audio.ringtoneUri) {
-      audioManager.stopRingtone();
-      void playSystemRingtone(audio.ringtoneUri);
+    // the native engine rings inside the helper: the renderer must not open
+    // the audio device, the two would fight over the speakers
+    if (profile?.engine !== 'native') {
+      audioManager.startRingtone(audio.ringtone, audio.ringtoneVolume, audio.ringtoneDeviceId);
+      setRingMode(); // loud ring like a real call (native only; no-op on web)
+      // Device ringtone wins over the synth when the user picked one.
+      if (isNative() && audio.ringtoneUri) {
+        audioManager.stopRingtone();
+        void playSystemRingtone(audio.ringtoneUri);
+      }
     }
     void window.api.notify({ title: 'Incoming call', body: remoteLabel, urgency: 'critical' });
     const tick = setInterval(() => setRemaining((r) => r - 1), 1000);

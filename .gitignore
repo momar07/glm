@@ -17,3 +17,10 @@ android/.kotlin
 *.jks
 *.keystore
 google-services.json
+
+# The native SIP engine: the pjsua libraries are big and rebuilt by
+# tools/build-native.sh, the helper is a build artifact.
+native/target
+native/sip-engine/third_party/pjproject-win-x64/lib
+native/sip-engine/third_party/pjproject-win-x64/include
+resources/sip-helper.exe

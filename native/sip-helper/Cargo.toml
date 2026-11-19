@@ -1,0 +1,8 @@
+[package]
+name = "sip-helper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sip-engine = { path = "../sip-engine" }
+serde_json = "1"

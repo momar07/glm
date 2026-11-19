@@ -1,6 +1,7 @@
 // Shared types used across main, preload, and renderer processes.
 
 import type { AgentCustomer, AgentInteraction } from './agent';
+import type { SipEngineEvent, SipHelperAnswer, SipHelperCommand } from './sipHelper';
 
 export type Presence =
   | 'offline'
@@ -34,6 +35,11 @@ export interface SipProfile {
   wsPort?: string; // custom WSS port for auto-fill; blank = 8089
   iceServers?: IceServerSpec[];
   preferredCodec?: string;
+  // 'native' = the pjsua helper (SIP over UDP/TCP/TLS with G.729), desktop
+  // Windows only; undefined or 'webrtc' = SIP.js over WSS.
+  engine?: 'webrtc' | 'native';
+  sipPort?: number; // the SIP port of the native engine, 5060 by default
+  transport?: 'udp' | 'tcp' | 'tls'; // the transport of the native engine
   dialPrefix?: string; // prepended to bare-number outbound dials (blank = disabled); never shown in logs
   autoAnswer?: boolean;
   dnd?: boolean;
@@ -194,6 +200,9 @@ export const IPC = {
   AGENT_OPEN_RECORD: 'agent:open-record',
   AGENT_STATE: 'agent:state',
   AGENT_POP: 'agent:pop',
+  SIP_AVAILABLE: 'sip:available',
+  SIP_COMMAND: 'sip:command',
+  SIP_EVENT: 'sip:event',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -224,6 +233,11 @@ export interface MainApi {
   onAgentState(cb: (s: AgentState) => void): () => void;
   onAgentPop(cb: (p: AgentPopEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
+  // The native engine (the sip-helper.exe of Windows). Available only when the
+  // helper was built for this install.
+  sipAvailable(): Promise<boolean>;
+  sipCommand(command: SipHelperCommand): Promise<SipHelperAnswer>;
+  onSipEvent(cb: (e: SipEngineEvent) => void): () => void;
 }
 
 declare global {

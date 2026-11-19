@@ -70,7 +70,7 @@ export interface SipEngineEvents {
 
 type Listener<K extends keyof SipEngineEvents> = SipEngineEvents[K];
 
-class Emitter {
+export class Emitter {
   private map = new Map<keyof SipEngineEvents, Set<(payload: any) => void>>();
 
   on<K extends keyof SipEngineEvents>(ev: K, cb: Listener<K>): () => void {

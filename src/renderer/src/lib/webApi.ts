@@ -108,5 +108,11 @@ export function createWebApi(): MainApi {
     onAgentState: () => () => {},
     onAgentPop: () => () => {},
     setTrustedHost: async () => {},
+    // The native engine is a Windows helper of the desktop app.
+    sipAvailable: async () => false,
+    sipCommand: async () => {
+      throw new Error('The native engine needs the desktop app');
+    },
+    onSipEvent: () => () => {},
   };
 }

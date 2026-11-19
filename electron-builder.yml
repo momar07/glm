@@ -11,6 +11,13 @@ files:
 asar: true
 asarUnpack:
   - resources/**
+# The native SIP engine (Windows x64): built by tools/build-native.sh, absent
+# from the source checkout, so the filter matches nothing when it was not built.
+extraResources:
+  - from: resources
+    to: .
+    filter:
+      - sip-helper.exe
 # ponytail: code signing placeholders — fill CSC_LINK/CSC_KEY_PASSWORD env vars before release
 win:
   target:

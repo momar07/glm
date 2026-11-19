@@ -26,6 +26,9 @@ const api: MainApi = {
   onAgentState: (cb) => subscribe(IPC.AGENT_STATE, cb),
   onAgentPop: (cb) => subscribe(IPC.AGENT_POP, cb),
   setTrustedHost: (host, trust) => ipcRenderer.invoke(IPC.TLS_TRUST_HOST, host, trust),
+  sipAvailable: () => ipcRenderer.invoke(IPC.SIP_AVAILABLE),
+  sipCommand: (command) => ipcRenderer.invoke(IPC.SIP_COMMAND, command),
+  onSipEvent: (cb) => subscribe(IPC.SIP_EVENT, cb),
 };
 
 contextBridge.exposeInMainWorld('api', api);
