@@ -1,5 +1,7 @@
 // Shared types used across main, preload, and renderer processes.
 
+import type { AgentCustomer, AgentInteraction } from './agent';
+
 export type Presence =
   | 'offline'
   | 'connecting'
@@ -66,11 +68,16 @@ export interface UiPrefs {
   autoSignIn: boolean; // connect active profile automatically on app open
 }
 
+export interface SecurityPrefs {
+  trustedHosts: string[]; // hosts whose self-signed/untrusted TLS certificate is accepted
+}
+
 export interface AppSettings {
   activeProfileId: string | null;
   profiles: SipProfile[];
   audio: AudioPrefs;
   ui: UiPrefs;
+  security: SecurityPrefs;
   log: { level: LogLevel; retentionDays: number };
   history: { retentionDays: number }; // call log age cap in days; 0 = keep forever
   codecs: string[]; // preference order, e.g. ['opus','G722','PCMU','PCMA']
@@ -122,6 +129,51 @@ export interface DeviceInfo {
   label: string;
 }
 
+// Call Center agent (middleware) — owned by the main process, mirrored in the UI.
+export type AgentStatus = 'available' | 'pause' | 'offline';
+
+export interface AgentState {
+  loggedIn: boolean;
+  connected: boolean;
+  extension: string;
+  status: AgentStatus;
+  reason: string;
+  queues: string[];
+  pauseReasons: string[];
+  loginAtMs: number;
+  statusAtMs: number;
+  serverOffsetMs: number;
+  error: string | null;
+}
+
+export interface AgentProfile {
+  extension: string;
+  password: string;
+  server: string;
+  port: number;
+  domain: string;
+}
+
+export interface AgentLoginRequest {
+  apiUrl: string;
+  username: string;
+  password: string;
+  crmBaseUrl?: string;
+}
+
+export type AgentLoginOutcome =
+  | { ok: true; state: AgentState; profile: AgentProfile }
+  | { ok: false; error: string };
+
+export interface AgentPopEvent {
+  callerId: string;
+  uid: string;
+  isNew: boolean;
+  customer: AgentCustomer | null;
+  lastInteraction: AgentInteraction | null;
+  receivedAt: number;
+}
+
 // IPC channel map — single source of truth for main<->preload<->renderer.
 export const IPC = {
   SETTINGS_GET: 'settings:get',
@@ -135,6 +187,13 @@ export const IPC = {
   APP_LAUNCH_AT_STARTUP: 'app:launch-at-startup',
   DIALOG_OPEN_CSV: 'dialog:open-csv',
   DIALOG_SAVE_CSV: 'dialog:save-csv',
+  TLS_TRUST_HOST: 'tls:trust-host',
+  AGENT_LOGIN: 'agent:login',
+  AGENT_LOGOUT: 'agent:logout',
+  AGENT_STATUS: 'agent:status',
+  AGENT_OPEN_RECORD: 'agent:open-record',
+  AGENT_STATE: 'agent:state',
+  AGENT_POP: 'agent:pop',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];
@@ -158,6 +217,13 @@ export interface MainApi {
   setLaunchAtStartup(enabled: boolean): Promise<void>;
   openCsv(): Promise<string | null>;
   saveCsv(defaultName: string): Promise<string | null>;
+  agentLogin(req: AgentLoginRequest): Promise<AgentLoginOutcome>;
+  agentLogout(): Promise<void>;
+  agentSetStatus(status: 'available' | 'pause', reason: string): Promise<void>;
+  agentOpenRecord(phone: string, uid: string, baseUrl?: string): Promise<void>;
+  onAgentState(cb: (s: AgentState) => void): () => void;
+  onAgentPop(cb: (p: AgentPopEvent) => void): () => void;
+  setTrustedHost(host: string, trust: boolean): Promise<void>;
 }
 
 declare global {

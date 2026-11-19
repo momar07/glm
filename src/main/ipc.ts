@@ -1,7 +1,9 @@
 import { ipcMain, Notification, app, dialog, BrowserWindow } from 'electron';
 import { IPC, type AppSettings, type LogEntry, type NotifyOptions } from '../shared/types';
+import type { AgentLoginRequest } from '../shared/types';
 import { settingsStore } from './store';
 import { fileLogger, mainLog } from './logger';
+import { AgentService } from './agent';
 
 // ponytail: per-channel validators as plain guards. Promote to a zod schema if IPC surface grows.
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -18,6 +20,22 @@ function isLogEntry(v: unknown): v is LogEntry {
 }
 function isNotify(v: unknown): v is NotifyOptions {
   return isObject(v) && typeof v.title === 'string' && typeof v.body === 'string';
+}
+function isLoginRequest(v: unknown): v is AgentLoginRequest {
+  return (
+    isObject(v) &&
+    typeof v.apiUrl === 'string' &&
+    typeof v.username === 'string' &&
+    typeof v.password === 'string' &&
+    (v.crmBaseUrl === undefined || typeof v.crmBaseUrl === 'string')
+  );
+}
+
+let agent: AgentService | null = null;
+
+export function shutdownAgent(): void {
+  agent?.dispose();
+  agent = null;
 }
 
 export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
@@ -81,6 +99,35 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
       filters: [{ name: 'CSV', extensions: ['csv'] }],
     });
     return r.canceled ? null : r.filePath ?? null;
+  });
+
+  agent = new AgentService(
+    (s) => getMainWindow()?.webContents.send(IPC.AGENT_STATE, s),
+    (p) => getMainWindow()?.webContents.send(IPC.AGENT_POP, p),
+  );
+  const svc = agent;
+
+  ipcMain.handle(IPC.AGENT_LOGIN, (_e, req: unknown) => {
+    if (!isLoginRequest(req)) throw new Error('invalid login request');
+    return svc.login(req);
+  });
+  ipcMain.handle(IPC.AGENT_LOGOUT, () => svc.logout());
+  ipcMain.handle(IPC.AGENT_STATUS, (_e, status: unknown, reason: unknown) => {
+    if (status !== 'available' && status !== 'pause') throw new Error('invalid agent status');
+    svc.setStatus(status, typeof reason === 'string' ? reason : '');
+  });
+  ipcMain.handle(IPC.AGENT_OPEN_RECORD, (_e, phone: unknown, uid: unknown, baseUrl: unknown) => {
+    if (typeof phone !== 'string') throw new Error('invalid phone');
+    return svc.openRecord(phone, typeof uid === 'string' ? uid : '', typeof baseUrl === 'string' ? baseUrl : undefined);
+  });
+
+  ipcMain.handle(IPC.TLS_TRUST_HOST, (_e, host: unknown, trust: unknown) => {
+    if (typeof host !== 'string' || !host.trim()) throw new Error('invalid host');
+    const h = host.trim().toLowerCase();
+    const cur = settingsStore.get().security?.trustedHosts ?? [];
+    const next = trust ? [...new Set([...cur, h])] : cur.filter((x) => x !== h);
+    settingsStore.set({ security: { trustedHosts: next } });
+    mainLog('info', 'ipc', `TLS trust for ${h}: ${Boolean(trust)}`);
   });
 
   mainLog('info', 'ipc', 'handlers registered');

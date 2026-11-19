@@ -1,8 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAgent } from '../store/agent';
 
-// Bottom tabs: Calls | Contacts. Logs/Settings stay in the header ⋮ menu.
+// Bottom tabs: Calls | Contacts (+ Agent while signed in). Logs/Settings stay in the header ⋮ menu.
 export function TabBar(): React.ReactElement {
+  const agentLoggedIn = useAgent((s) => s.state.loggedIn);
   const cls = ({ isActive }: { isActive: boolean }): string =>
     `flex-1 flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition-colors ${
       isActive ? 'text-brand-400' : 'text-slate-500 hover:text-slate-300'
@@ -24,6 +26,15 @@ export function TabBar(): React.ReactElement {
         </svg>
         Contacts
       </NavLink>
+      {agentLoggedIn && (
+        <NavLink to="/agent" className={cls}>
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+            <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+          </svg>
+          Agent
+        </NavLink>
+      )}
     </nav>
   );
 }

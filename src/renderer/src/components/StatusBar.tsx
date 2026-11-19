@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { NavLink } from 'react-router-dom';
 import { useSip } from '../store/sip';
 import { useCall } from '../store/call';
+import { useAgent } from '../store/agent';
 import { isNative } from '../lib/platform';
 import { PresenceDot } from './ui';
 
@@ -21,11 +22,15 @@ export function StatusBar(): React.ReactElement {
   const disconnect = useSip((s) => s.disconnect);
   const calls = useCall((s) => s.calls);
   const active = calls.filter((c) => c.status !== 'ended' && c.status !== 'failed').length;
+  const agent = useAgent((s) => s.state);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const logout = (): void => {
     setMenuOpen(false);
-    if (window.confirm('Disconnect and logout? Any active call will end.')) void disconnect();
+    if (window.confirm('Disconnect and logout? Any active call will end.')) {
+      if (agent.loggedIn) void useAgent.getState().logout();
+      void disconnect();
+    }
   };
 
   const items: [string, string][] = [
@@ -53,6 +58,19 @@ export function StatusBar(): React.ReactElement {
         <PresenceDot presence={presence} />
         <span className="font-medium text-slate-200 truncate">{presenceLabel[presence] ?? 'Unknown'}</span>
         {transport && <span className="text-xs text-slate-500 hidden sm:inline">· WSS</span>}
+        {agent.loggedIn && (
+          <span className="text-xs text-slate-400 whitespace-nowrap hidden sm:inline">
+            · {agent.status === 'pause' ? `Paused${agent.reason ? ` (${agent.reason})` : ''}` : 'Available'}
+          </span>
+        )}
+        {agent.loggedIn && agent.queues.length > 0 && (
+          <span className="text-xs text-brand-400 whitespace-nowrap hidden md:inline">
+            · Q {agent.queues.join(', ')}
+          </span>
+        )}
+        {agent.loggedIn && !agent.connected && (
+          <span className="text-xs text-warn-400 whitespace-nowrap">· agent offline</span>
+        )}
         {active > 0 && <span className="text-xs text-brand-400 whitespace-nowrap">· {active} call{active > 1 ? 's' : ''}</span>}
       </div>
       <button

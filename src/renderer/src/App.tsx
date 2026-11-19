@@ -16,6 +16,8 @@ import { Settings } from './components/Settings';
 import { Contacts } from './components/Contacts';
 import { Logs } from './components/Logs';
 import { useCall } from './store/call';
+import { useAgent } from './store/agent';
+import { AgentPanel } from './components/AgentPanel';
 import { logger } from './lib/logger';
 
 export default function App(): React.ReactElement {
@@ -66,6 +68,11 @@ export default function App(): React.ReactElement {
   // Ref guard — prevents double auto-connect even if the effect fires twice.
   // Unlike useState, a ref updates synchronously so there's no race window.
   const bootRef = useRef(false);
+
+  // Agent events (middleware state + CRM pops) are pushed by the main process.
+  useEffect(() => {
+    useAgent.getState().init();
+  }, []);
 
   // Load persisted settings once on mount.
   useEffect(() => {
@@ -169,6 +176,7 @@ export default function App(): React.ReactElement {
         <Routes>
           <Route path="/" element={hasActiveCall || hasRingingOut || hasJoining ? <CallView /> : <CallsPage />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/agent" element={<AgentPanel />} />
           <Route path="/history" element={<Navigate to="/" replace />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/settings" element={<Settings />} />

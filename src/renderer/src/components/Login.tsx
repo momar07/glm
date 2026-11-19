@@ -2,20 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { App as CapApp } from '@capacitor/app';
 import { useSettings } from '../store/settings';
 import { useSip } from '../store/sip';
-import { isNative } from '../lib/platform';
+import { useAgent } from '../store/agent';
+import { isNative, isNativeShell } from '../lib/platform';
 import { Button, Input, Field, Card, Toggle } from './ui';
+import { ModeSwitch, type LoginMode } from './ModeSwitch';
+import { AgentLogin } from './AgentLogin';
+import { buildWsUrl } from '../lib/wsUrl';
 import type { SipProfile } from '@shared/types';
 import { logger } from '../lib/logger';
-
-// Default Asterisk WebSocket port — used when auto-fill is on and port is blank.
-export const DEFAULT_WS_PORT = '8089';
-
-export function buildWsUrl(domain: string, port?: string): string {
-  const d = domain.trim();
-  if (!d) return '';
-  const digits = (port ?? '').replace(/\D/g, '');
-  return `wss://${d}:${digits || DEFAULT_WS_PORT}/ws`;
-}
 
 function testWss(url: string, timeoutMs = 5000): Promise<{ ok: boolean; error?: string }> {
   return new Promise((resolve) => {
@@ -55,6 +49,10 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null);
   const [form, setForm] = useState<SipProfile>(blankProfile());
+  // An agent deployment should open on the agent form; plain SIP stays the default.
+  const [mode, setMode] = useState<LoginMode>(() =>
+    isNativeShell && useAgent.getState().username ? 'agent' : 'sip',
+  );
 
   useEffect(() => {
     if (editing) setForm(editing);
@@ -102,6 +100,10 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
     return <div className="flex items-center justify-center h-full text-slate-500">Loading…</div>;
   }
 
+  if (mode === 'agent') {
+    return <AgentLogin onConnected={onConnected} onSwitchMode={() => setMode('sip')} />;
+  }
+
   return (
     <div className="h-full overflow-y-auto no-scrollbar p-4 flex flex-col items-center">
       <div className="w-full max-w-md space-y-3 my-auto">
@@ -112,6 +114,8 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
           <h1 className="mt-2 text-lg font-semibold text-slate-100">GLMWebrtc Softphone</h1>
           <p className="text-xs text-slate-500">Connect to your SIP / WebRTC PBX</p>
         </header>
+
+        {isNativeShell && <ModeSwitch mode={mode} onChange={setMode} />}
 
         {settings.profiles.length > 0 && (
           <Card className="p-2.5">

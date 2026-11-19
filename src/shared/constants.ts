@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     launchAtStartup: false,
     autoSignIn: true,
   },
+  security: { trustedHosts: [] },
   log: { level: 'info', retentionDays: 7 },
   history: { retentionDays: 1 }, // call log age cap; 0 = keep forever
   codecs: ['opus', 'telephone-event'], // opus-only default: ~32kbps+DTX vs ~87kbps G.711; stored prefs win on upgrade

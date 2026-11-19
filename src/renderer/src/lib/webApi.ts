@@ -22,6 +22,7 @@ function loadSettings(): AppSettings {
       ...s,
       audio: { ...DEFAULT_SETTINGS.audio, ...s.audio },
       ui: { ...DEFAULT_SETTINGS.ui, ...s.ui },
+      security: { ...DEFAULT_SETTINGS.security, ...s.security },
       log: { ...DEFAULT_SETTINGS.log, ...s.log },
       transport: { ...DEFAULT_SETTINGS.transport, ...s.transport },
       history: { ...DEFAULT_SETTINGS.history, ...s.history },
@@ -99,5 +100,13 @@ export function createWebApi(): MainApi {
     // CSV picking needs a file input; Contacts.tsx branches on isNativeShell.
     openCsv: async () => null,
     saveCsv: async () => null,
+    // Agent mode talks to the middleware from the Electron main process only.
+    agentLogin: async () => ({ ok: false as const, error: 'Agent mode needs the desktop app' }),
+    agentLogout: async () => {},
+    agentSetStatus: async () => {},
+    agentOpenRecord: async () => {},
+    onAgentState: () => () => {},
+    onAgentPop: () => () => {},
+    setTrustedHost: async () => {},
   };
 }

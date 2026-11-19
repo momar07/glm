@@ -32,6 +32,7 @@ class SettingsStore {
       ...s,
       audio: { ...DEFAULT_SETTINGS.audio, ...s.audio },
       ui: { ...DEFAULT_SETTINGS.ui, ...s.ui },
+      security: { ...DEFAULT_SETTINGS.security, ...s.security },
       log: { ...DEFAULT_SETTINGS.log, ...s.log },
       transport: { ...DEFAULT_SETTINGS.transport, ...s.transport },
       history: { ...DEFAULT_SETTINGS.history, ...s.history },
