@@ -18,6 +18,8 @@ const SOUND_DEVICE: pjsua_conf_port_id = 0;
 const PJSUA_INVALID_ID: pjsua_acc_id = -1;
 /// PJ_FALSE, the boolean of pjsip is an int.
 const PJ_FALSE: pj_bool_t = 0;
+/// PJ_TRUE, the boolean of pjsip is an int.
+const PJ_TRUE: pj_bool_t = 1;
 /// PJSUA_CALL_UNHOLD, the call goes back to the normal.
 const PJSUA_CALL_UNHOLD: u32 = 1;
 /// PJSIP_TRANSPORT_UDP.
@@ -436,10 +438,18 @@ fn register(
     server: &mut String,
 ) -> Result<(), String> {
     unsafe {
-        // a second register (a reload of the window, a profile switch) must
-        // not leave the old account of this helper alive
-        if let Some(old) = account.take() {
-            pjsua_acc_del(old);
+        // a second register (a reload of the window, a profile switch)
+        // re-registers the existing account in place: deleting it first
+        // would send an un-REGISTER and pjsua_acc_add would then fail on
+        // the duplicate account id, leaving the engine with no account
+        if let Some(acc_id) = *account {
+            let status = pjsua_acc_set_registration(acc_id, PJ_TRUE);
+            if status != PJ_SUCCESS {
+                return Err(format!("the account could not be registered: {}", status));
+            }
+            set_codecs(&options.codecs);
+            *server = options.server.clone();
+            return Ok(());
         }
         // the transport of the signalling, the local port is free
         let mut transport_config: pjsua_transport_config = std::mem::zeroed();

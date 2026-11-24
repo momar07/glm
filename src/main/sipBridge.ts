@@ -26,8 +26,8 @@ export function registerSipIpc(getMainWindow: () => BrowserWindow | null): void 
   webContents?.on('did-finish-load', () => {
     loaded = true;
   });
-  webContents?.on('did-start-loading', () => {
-    if (loaded) helper?.dispose();
+  webContents?.on('did-start-navigation', (_e, _url, isInPlace, isMainFrame) => {
+    if (loaded && isMainFrame && !isInPlace) helper?.dispose();
   });
 
   ipcMain.handle(IPC.SIP_AVAILABLE, () => helper?.available() ?? false);
