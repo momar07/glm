@@ -26,27 +26,70 @@ export interface AgentLoginForm {
   password: string;
   crmBaseUrl: string;
   trustCert: boolean;
+  serverIp: string;
+  saveCredentials: boolean;
+  autoLogin: boolean;
+  webrtc: boolean;
 }
 
 interface SavedForm {
   apiUrl: string;
+  serverIp: string;
   username: string;
+  // Only stored when saveCredentials is on; '' otherwise.
+  password: string;
   crmBaseUrl: string;
   trustCert: boolean;
+  webrtc: boolean;
+  saveCredentials: boolean;
+  autoLogin: boolean;
+}
+
+export interface AgentPrefsPatch {
+  serverIp?: string;
+  username?: string;
+  crmBaseUrl?: string;
+  trustCert?: boolean;
+  webrtc?: boolean;
+  saveCredentials?: boolean;
+  autoLogin?: boolean;
+}
+
+// The Server IP field shows just what the agent typed; older saves only
+// have the full middleware URL, so derive the field value from it
+// (strip the scheme and the default :8080 port).
+function deriveServerIp(apiUrl: string): string {
+  return apiUrl
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/+$/, '')
+    .replace(/:8080$/, '');
 }
 
 function loadForm(): SavedForm {
   const fallback: SavedForm = {
     apiUrl: 'http://192.168.2.22:8080',
+    serverIp: '',
     username: '',
+    password: '',
     crmBaseUrl: '',
     trustCert: true,
+    webrtc: false,
+    saveCredentials: false,
+    autoLogin: false,
   };
   try {
     const raw = localStorage.getItem(FORM_KEY);
-    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<SavedForm>) } : fallback;
+    const merged = raw ? { ...fallback, ...(JSON.parse(raw) as Partial<SavedForm>) } : fallback;
+    if (!merged.serverIp && merged.apiUrl) merged.serverIp = deriveServerIp(merged.apiUrl);
+    // A stored password only makes sense while saving is on.
+    if (!merged.saveCredentials) {
+      merged.password = '';
+      merged.autoLogin = false;
+    }
+    return merged;
   } catch {
-    return fallback;
+    return { ...fallback, serverIp: deriveServerIp(fallback.apiUrl) };
   }
 }
 
@@ -63,13 +106,19 @@ interface AgentStore {
   profile: AgentProfile | null;
   pop: AgentPopEvent | null;
   apiUrl: string;
+  serverIp: string;
   crmBaseUrl: string;
   username: string;
   trustCert: boolean;
+  savedPassword: string;
+  webrtc: boolean;
+  saveCredentials: boolean;
+  autoLogin: boolean;
   loggingIn: boolean;
   loginError: string | null;
   actionError: string | null;
   init: () => void;
+  updatePrefs: (p: AgentPrefsPatch) => void;
   login: (form: AgentLoginForm) => Promise<boolean>;
   logout: () => Promise<void>;
   setStatus: (status: 'available' | 'pause', reason: string) => Promise<void>;
@@ -86,9 +135,14 @@ export const useAgent = create<AgentStore>((set, get) => {
     profile: null,
     pop: null,
     apiUrl: saved.apiUrl,
+    serverIp: saved.serverIp,
     crmBaseUrl: saved.crmBaseUrl,
     username: saved.username,
     trustCert: saved.trustCert,
+    savedPassword: saved.password,
+    webrtc: saved.webrtc,
+    saveCredentials: saved.saveCredentials,
+    autoLogin: saved.autoLogin,
     loggingIn: false,
     loginError: null,
     actionError: null,
@@ -100,6 +154,37 @@ export const useAgent = create<AgentStore>((set, get) => {
       window.api.onAgentPop((p) => {
         set({ pop: p });
         logger.info('agent', `CRM pop for ${p.callerId}${p.isNew ? ' (new caller)' : ''}`);
+      });
+    },
+
+    updatePrefs(p) {
+      const cur = get();
+      // Auto login needs a saved password: turning Save off clears the
+      // stored password and forces Auto off with it.
+      const saveCredentials = p.saveCredentials ?? cur.saveCredentials;
+      const autoLogin = saveCredentials ? (p.autoLogin ?? cur.autoLogin) : false;
+      const savedPassword = saveCredentials ? cur.savedPassword : '';
+      const next = {
+        serverIp: p.serverIp ?? cur.serverIp,
+        username: p.username ?? cur.username,
+        crmBaseUrl: p.crmBaseUrl ?? cur.crmBaseUrl,
+        trustCert: p.trustCert ?? cur.trustCert,
+        webrtc: p.webrtc ?? cur.webrtc,
+        saveCredentials,
+        autoLogin,
+        savedPassword,
+      };
+      set(next);
+      saveForm({
+        apiUrl: cur.apiUrl,
+        serverIp: next.serverIp,
+        username: next.username,
+        password: savedPassword,
+        crmBaseUrl: next.crmBaseUrl,
+        trustCert: next.trustCert,
+        webrtc: next.webrtc,
+        saveCredentials,
+        autoLogin,
       });
     },
 
@@ -119,20 +204,34 @@ export const useAgent = create<AgentStore>((set, get) => {
           set({ loginError: out.error });
           return false;
         }
+        // The password is only persisted when the agent asked to save
+        // credentials; with saving off any stored password is cleared.
+        const savedPassword = form.saveCredentials ? form.password : '';
+        const autoLogin = form.saveCredentials && form.autoLogin;
         saveForm({
           apiUrl,
+          serverIp: form.serverIp,
           username: form.username.trim(),
+          password: savedPassword,
           crmBaseUrl: form.crmBaseUrl.trim(),
           trustCert: form.trustCert,
+          webrtc: form.webrtc,
+          saveCredentials: form.saveCredentials,
+          autoLogin,
         });
         set({
           state: out.state,
           profile: out.profile,
           pop: null,
           apiUrl,
+          serverIp: form.serverIp,
           username: form.username.trim(),
           crmBaseUrl: form.crmBaseUrl.trim(),
           trustCert: form.trustCert,
+          savedPassword,
+          webrtc: form.webrtc,
+          saveCredentials: form.saveCredentials,
+          autoLogin,
         });
         logger.info('agent', `logged in as ${out.profile.extension}`);
         return true;

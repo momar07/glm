@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSettings } from '../store/settings';
 import { useSip } from '../store/sip';
+import { useAgent } from '../store/agent';
 import { Button, Card, Field, Input, Label, Select, Toggle } from './ui';
 import { audioManager } from '../audio/AudioManager';
 import { isNative, isNativeShell } from '../lib/platform';
@@ -23,6 +24,7 @@ const TABS: { id: TabId; label: string }[] = [
 
 export function Settings(): React.ReactElement {
   const { settings, patch, upsertProfile } = useSettings();
+  const agent = useAgent();
   const disconnect = useSip((s) => s.disconnect);
   const presence = useSip((s) => s.presence);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
@@ -112,6 +114,7 @@ export function Settings(): React.ReactElement {
 
       <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
         {tab === 'account' && (
+          <div className="space-y-2">
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-400">{presence === 'offline' ? 'Not connected' : `Connected — ${presence}`}</span>
@@ -145,6 +148,26 @@ export function Settings(): React.ReactElement {
               );
             })()}
           </Card>
+          <Card className="p-4 space-y-3">
+            <Label>Agent / Middleware</Label>
+            <Field label="CRM page URL (optional)">
+              <Input
+                value={agent.crmBaseUrl}
+                onChange={(e) => agent.updatePrefs({ crmBaseUrl: e.target.value })}
+                placeholder="https://crm.local/record"
+                className="font-mono text-xs"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
+            </Field>
+            <Toggle
+              checked={agent.trustCert}
+              onChange={(v) => agent.updatePrefs({ trustCert: v })}
+              label="Trust this server's certificate (self-signed PBX)"
+            />
+          </Card>
+          </div>
         )}
 
         {tab === 'audio' && (

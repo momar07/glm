@@ -100,7 +100,7 @@ export function Login({ onConnected }: { onConnected: () => void }): React.React
   }
 
   if (mode === 'agent') {
-    return <AgentLogin onConnected={onConnected} onSwitchMode={() => setMode('sip')} />;
+    return <AgentLogin onConnected={onConnected} />;
   }
 
   return (
