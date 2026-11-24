@@ -219,13 +219,33 @@ export function PhoneBar({
 
   const elapsed =
     call?.connectedAt && inCall ? Math.floor((now - call.connectedAt) / 1000) : 0;
-  const remoteLabel = call ? call.displayName || numberOf(call.remote) : '';
-  const callerTag =
-    call &&
-    pop &&
-    crmPopIsFresh(pop.receivedAt, Date.now()) &&
-    sameCaller(pop.callerId, numberOf(call.remote))
-      ? pop.customer?.tag
+  // Caller identity for the active-call bar (design D). Real sources only,
+  // in order: the CRM screen pop matched to this call by caller number (the
+  // same freshness + sameCaller match the VIP tag already used), the SIP
+  // display name carried on the session, then a contacts match by number.
+  const remoteNumber = call ? numberOf(call.remote) : '';
+  const matchedPop =
+    call && pop && crmPopIsFresh(pop.receivedAt, Date.now()) && sameCaller(pop.callerId, remoteNumber)
+      ? pop
+      : undefined;
+  const callerTag = matchedPop?.customer?.tag;
+  const contactName = call
+    ? contacts.find((c) => sameCaller(c.number, remoteNumber))?.name
+    : undefined;
+  const callerName = matchedPop?.customer?.name || call?.displayName || contactName || '';
+  const callerInitials = ((): string => {
+    const parts = callerName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return callerName.slice(0, 2).toUpperCase();
+  })();
+  // Queue attribution: neither the call session nor the CRM pop carries a
+  // per-call queue — the middleware only ever sends the agent's assigned
+  // queues (login / state_update). The pill is therefore shown only when
+  // attribution is unambiguous: an incoming call while the agent is
+  // assigned to exactly one queue.
+  const queueLabel =
+    call && call.direction === 'incoming' && agent.loggedIn && agent.queues.length === 1
+      ? agent.queues[0]
       : undefined;
 
   const dtmf = (d: string): void => {
@@ -267,18 +287,48 @@ export function PhoneBar({
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
             <div className="flex items-center gap-2 min-w-0 pr-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-xs font-extrabold text-white truncate">{remoteLabel}</span>
-                {callerTag === 'VIP' && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-400 text-slate-950 shrink-0">
-                    ★ VIP
-                  </span>
+              <span className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-[11px] font-extrabold text-white shrink-0">
+                {callerName ? (
+                  callerInitials
+                ) : (
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.02-.24 11.4 11.4 0 003.57.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1c0 1.25.2 2.45.57 3.57a1 1 0 01-.25 1.02l-2.2 2.2z" />
+                  </svg>
                 )}
-                {call.held && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
-                    HOLD
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[13px] font-semibold text-slate-100 truncate max-w-[150px]">
+                    {callerName || remoteNumber}
                   </span>
-                )}
+                  {callerTag === 'VIP' && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-400 text-slate-950 shrink-0">
+                      ★ VIP
+                    </span>
+                  )}
+                  {call.held && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0">
+                      HOLD
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-px min-w-0">
+                  {callerName ? (
+                    <span className="text-[11px] font-mono text-slate-400 truncate">{remoteNumber}</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-slate-500 shrink-0">
+                      {call.direction === 'incoming' ? 'Incoming' : 'Outgoing'}
+                    </span>
+                  )}
+                  {queueLabel && (
+                    <span
+                      className="px-1.5 py-px rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold shrink-0"
+                      title={`Queue ${queueLabel}`}
+                    >
+                      Q {queueLabel}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
