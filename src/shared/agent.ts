@@ -34,6 +34,7 @@ export interface AgentPop {
   callerId: string;
   uid: string;
   isNew: boolean;
+  queueName: string;
   customer: AgentCustomer | null;
   lastInteraction: AgentInteraction | null;
 }
@@ -244,6 +245,7 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
         callerId: String(r.caller_number ?? r.caller_id ?? ''),
         uid: String(r.cdr_uniqueid ?? r.uniqueid ?? ''),
         isNew: Boolean(r.is_new) || !customer,
+        queueName: String(r.queue_name ?? ''),
         customer,
         lastInteraction: li
           ? {

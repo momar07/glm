@@ -267,15 +267,18 @@ export function PhoneBar({
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return displayName.slice(0, 2).toUpperCase();
   })();
-  // Queue attribution: neither the call session nor the CRM pop carries a
-  // per-call queue — the middleware only ever sends the agent's assigned
-  // queues (login / state_update). The pill is therefore shown only when
-  // attribution is unambiguous: an incoming call while the agent is
-  // assigned to exactly one queue.
+  // Queue attribution: the middleware sends the queue NAME with the CRM
+  // screen pop (queue_name, resolved from the queue's description), and
+  // matchedPop is already matched to this call by caller id — that name
+  // wins. Fallback for pops without a queue: the agent's assigned queues
+  // (login / state_update), shown only when attribution is unambiguous —
+  // an incoming call while the agent is assigned to exactly one queue.
+  const popQueueName = matchedPop?.queueName?.trim() ? matchedPop.queueName.trim() : undefined;
   const queueLabel =
-    call && call.direction === 'incoming' && agent.loggedIn && agent.queues.length === 1
+    popQueueName ??
+    (call && call.direction === 'incoming' && agent.loggedIn && agent.queues.length === 1
       ? agent.queues[0]
-      : undefined;
+      : undefined);
 
   const dtmf = (d: string): void => {
     if (!call) return;
@@ -351,10 +354,10 @@ export function PhoneBar({
                   )}
                   {queueLabel && (
                     <span
-                      className="px-1.5 py-px rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold shrink-0"
+                      className="px-1.5 py-px rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold shrink-0 max-w-[110px] truncate"
                       title={`Queue ${queueLabel}`}
                     >
-                      Q {queueLabel}
+                      {popQueueName ? queueLabel : `Q ${queueLabel}`}
                     </span>
                   )}
                 </div>

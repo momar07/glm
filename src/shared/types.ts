@@ -175,6 +175,7 @@ export interface AgentPopEvent {
   callerId: string;
   uid: string;
   isNew: boolean;
+  queueName: string;
   customer: AgentCustomer | null;
   lastInteraction: AgentInteraction | null;
   receivedAt: number;
