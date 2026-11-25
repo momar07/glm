@@ -191,6 +191,15 @@ export interface AgentWhatsAppEvent {
   receivedAt: number;
 }
 
+// The outcome of a quick reply sent from the bar (Phase 2), relayed by
+// the middleware after the WhatsApp service accepted or refused it.
+export interface AgentWhatsAppResultEvent {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+  receivedAt: number;
+}
+
 // IPC channel map — single source of truth for main<->preload<->renderer.
 export const IPC = {
   SETTINGS_GET: 'settings:get',
@@ -214,6 +223,8 @@ export const IPC = {
   AGENT_STATE: 'agent:state',
   AGENT_POP: 'agent:pop',
   AGENT_WHATSAPP: 'agent:whatsapp',
+  AGENT_WHATSAPP_REPLY: 'agent:whatsapp-reply',
+  AGENT_WHATSAPP_RESULT: 'agent:whatsapp-result',
   SIP_AVAILABLE: 'sip:available',
   SIP_COMMAND: 'sip:command',
   SIP_EVENT: 'sip:event',
@@ -248,9 +259,11 @@ export interface MainApi {
   agentSetStatus(status: 'available' | 'pause', reason: string): Promise<void>;
   agentOpenRecord(phone: string, uid: string, baseUrl?: string): Promise<void>;
   agentOpenWhatsApp(url: string): Promise<void>;
+  agentWhatsAppReply(ticketId: number, text: string): Promise<void>;
   onAgentState(cb: (s: AgentState) => void): () => void;
   onAgentPop(cb: (p: AgentPopEvent) => void): () => void;
   onAgentWhatsApp(cb: (u: AgentWhatsAppEvent) => void): () => void;
+  onAgentWhatsAppResult(cb: (r: AgentWhatsAppResultEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
   // The native engine (the sip-helper.exe of Windows). Available only when the
   // helper was built for this install.

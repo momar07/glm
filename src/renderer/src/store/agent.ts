@@ -103,15 +103,21 @@ function saveForm(f: SavedForm): void {
   }
 }
 
-// WhatsApp phonebar state (Phase 1, read-only). `seen` stays false until
-// the first whatsapp_update arrives in this session: with the integration
-// off on the server, the bar shows no WhatsApp UI at all (no dead button).
+// WhatsApp phonebar state. `seen` stays false until the first
+// whatsapp_update arrives in this session. Since Phase 2 the bar's
+// WhatsApp button is permanent (the badge and drawer fill in when the
+// first snapshot lands — the middleware requests one at login), so
+// `seen` now only records whether any snapshot has ever arrived.
 export interface WhatsAppBarState {
   seen: boolean;
   unreadTotal: number;
   tickets: WhatsAppTicket[];
   lastAssigned: WhatsAppTicket | null;
   lastAssignedAt: number;
+  // Phase 2: per-ticket quick-reply outcome, keyed by ticket id. The
+  // 'sending' state is set locally; 'sent'/'error' arrive with the
+  // middleware's whatsapp_reply_result.
+  replyStatus: Record<number, { state: 'sending' | 'sent' | 'error'; error?: string; at: number }>;
 }
 
 const BLANK_WHATSAPP: WhatsAppBarState = {
@@ -120,6 +126,7 @@ const BLANK_WHATSAPP: WhatsAppBarState = {
   tickets: [],
   lastAssigned: null,
   lastAssignedAt: 0,
+  replyStatus: {},
 };
 
 interface AgentStore {
@@ -147,6 +154,7 @@ interface AgentStore {
   clearPop: () => void;
   openRecord: (phone: string, uid: string) => Promise<void>;
   openWhatsApp: () => Promise<void>;
+  sendWhatsAppReply: (ticketId: number, text: string) => Promise<void>;
 }
 
 let bound = false;
@@ -182,6 +190,7 @@ export const useAgent = create<AgentStore>((set, get) => {
       window.api.onAgentWhatsApp((u) => {
         set((cur) => ({
           whatsapp: {
+            ...cur.whatsapp,
             seen: true,
             unreadTotal: u.unreadTotal,
             tickets: u.tickets,
@@ -192,6 +201,22 @@ export const useAgent = create<AgentStore>((set, get) => {
           },
         }));
         logger.info('agent', `WhatsApp update: ${u.unreadTotal} unread across ${u.tickets.length} tickets`);
+      });
+      window.api.onAgentWhatsAppResult((r) => {
+        set((cur) => ({
+          whatsapp: {
+            ...cur.whatsapp,
+            replyStatus: {
+              ...cur.whatsapp.replyStatus,
+              [r.ticketId]: {
+                state: r.ok ? 'sent' : 'error',
+                error: r.ok ? undefined : r.error || 'Send failed',
+                at: r.receivedAt,
+              },
+            },
+          },
+        }));
+        logger.info('agent', `WhatsApp reply for ticket ${r.ticketId}: ${r.ok ? 'queued' : 'failed'}`);
       });
     },
 
@@ -321,6 +346,35 @@ export const useAgent = create<AgentStore>((set, get) => {
         await window.api.agentOpenWhatsApp(url);
       } catch (e) {
         logger.error('agent', `opening WhatsApp in Issabel failed: ${e instanceof Error ? e.message : e}`);
+      }
+    },
+
+    async sendWhatsAppReply(ticketId, text) {
+      const body = text.trim();
+      if (!body) return;
+      set((cur) => ({
+        whatsapp: {
+          ...cur.whatsapp,
+          replyStatus: { ...cur.whatsapp.replyStatus, [ticketId]: { state: 'sending', at: Date.now() } },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppReply(ticketId, body);
+        // The outcome itself arrives via onAgentWhatsAppResult.
+      } catch (e) {
+        set((cur) => ({
+          whatsapp: {
+            ...cur.whatsapp,
+            replyStatus: {
+              ...cur.whatsapp.replyStatus,
+              [ticketId]: {
+                state: 'error',
+                error: e instanceof Error ? e.message : 'Send failed',
+                at: Date.now(),
+              },
+            },
+          },
+        }));
       }
     },
 

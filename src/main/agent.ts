@@ -11,6 +11,7 @@ import {
   pongJson,
   statusChangeJson,
   statusChanged,
+  whatsAppReplyJson,
   workspaceUrl,
 } from '../shared/agent';
 import type {
@@ -20,6 +21,7 @@ import type {
   AgentProfile,
   AgentState,
   AgentWhatsAppEvent,
+  AgentWhatsAppResultEvent,
 } from '../shared/types';
 import { mainLog } from './logger';
 
@@ -65,6 +67,7 @@ export class AgentService {
     private emitState: (s: AgentState) => void,
     private emitPop: (p: AgentPopEvent) => void,
     private emitWhatsApp: (u: AgentWhatsAppEvent) => void,
+    private emitWhatsAppResult: (r: AgentWhatsAppResultEvent) => void = () => {},
   ) {}
 
   snapshot(): AgentState {
@@ -168,6 +171,16 @@ export class AgentService {
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 
+  // Quick reply from the WhatsApp drawer (Phase 2): rides the same
+  // session socket; the middleware stamps the agent identity from the
+  // session and the WhatsApp service runs its own send path. The
+  // outcome comes back asynchronously as a whatsapp_reply_result.
+  whatsAppReply(ticketId: number, text: string): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppReplyJson(ticketId, text));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
   // Opens the WhatsApp module inside Issabel (system browser). The URL is
   // built by the renderer from the middleware base (issabelModuleUrl);
   // only http(s) URLs are ever handed to the shell.
@@ -258,6 +271,11 @@ export class AgentService {
       // Phase 1: forwarded to the renderer store as-is; the bar renders
       // it read-only (badge / toast / drawer), nothing is sent back.
       this.emitWhatsApp({ ...ev.update, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_result') {
+      // Phase 2: the outcome of a quick reply sent from the drawer.
+      this.emitWhatsAppResult({ ...ev.result, receivedAt: Date.now() });
       return;
     }
     if (ev.kind !== 'state') return;

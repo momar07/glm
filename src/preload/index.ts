@@ -25,9 +25,11 @@ const api: MainApi = {
   agentOpenRecord: (phone, uid, baseUrl) =>
     ipcRenderer.invoke(IPC.AGENT_OPEN_RECORD, phone, uid, baseUrl),
   agentOpenWhatsApp: (url) => ipcRenderer.invoke(IPC.AGENT_OPEN_WHATSAPP, url),
+  agentWhatsAppReply: (ticketId, text) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_REPLY, ticketId, text),
   onAgentState: (cb) => subscribe(IPC.AGENT_STATE, cb),
   onAgentPop: (cb) => subscribe(IPC.AGENT_POP, cb),
   onAgentWhatsApp: (cb) => subscribe(IPC.AGENT_WHATSAPP, cb),
+  onAgentWhatsAppResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_RESULT, cb),
   setTrustedHost: (host, trust) => ipcRenderer.invoke(IPC.TLS_TRUST_HOST, host, trust),
   sipAvailable: () => ipcRenderer.invoke(IPC.SIP_AVAILABLE),
   sipCommand: (command) => ipcRenderer.invoke(IPC.SIP_COMMAND, command),

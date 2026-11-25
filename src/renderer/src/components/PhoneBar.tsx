@@ -83,6 +83,7 @@ export function PhoneBar({
   const pop = useAgent((s) => s.pop);
   const whatsapp = useAgent((s) => s.whatsapp);
   const openWhatsApp = useAgent((s) => s.openWhatsApp);
+  const sendWhatsAppReply = useAgent((s) => s.sendWhatsAppReply);
   const contacts = useContacts((s) => s.contacts);
 
   const [drawer, setDrawer] = useState<Drawer>(null);
@@ -98,6 +99,18 @@ export function PhoneBar({
   const [dtmfDigits, setDtmfDigits] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [waToast, setWaToast] = useState(false);
+  // WhatsApp quick reply (Phase 2): the selected ticket in the drawer
+  // and the draft typed for it. The draft clears when the ticket is
+  // switched or when the middleware confirms the send.
+  const [waSel, setWaSel] = useState<number | null>(null);
+  const [waText, setWaText] = useState('');
+  useEffect(() => {
+    if (waSel != null && whatsapp.replyStatus[waSel]?.state === 'sent') setWaText('');
+  }, [whatsapp.replyStatus, waSel]);
+  const selectWaTicket = (id: number): void => {
+    setWaSel((cur) => (cur === id ? null : id));
+    setWaText('');
+  };
   const [now, setNow] = useState(Date.now());
 
   // WhatsApp assignment toast: appears when the store stamps a NEW
@@ -538,7 +551,7 @@ export function PhoneBar({
                 </svg>
                 <span>Keypad</span>
               </button>
-              {agent.loggedIn && whatsapp.seen && (
+              {agent.loggedIn && (
                 <button
                   onClick={() => toggleDrawer('whatsapp')}
                   className={`${toggleBtnCls(drawer === 'whatsapp')} relative`}
@@ -815,9 +828,11 @@ export function PhoneBar({
         </DrawerShell>
       )}
 
-      {/* WhatsApp tickets — Phase 1 READ-ONLY: opening this drawer never
-          marks anything read and there is no composer; replies happen in
-          the WhatsApp module inside Issabel. */}
+      {/* WhatsApp tickets — Phase 2: tap a ticket to open its quick
+          reply. The reply rides the agent session to the middleware and
+          into the WhatsApp module's own send path (queue + guardrails),
+          exactly like a reply typed in Issabel. Opening this drawer
+          still never marks anything read. */}
       {drawer === 'whatsapp' && agent.loggedIn && (
         <DrawerShell width="max-w-[400px]" title="WhatsApp Tickets" dot="bg-emerald-400" onClose={() => setDrawer(null)}>
           <button
@@ -830,8 +845,17 @@ export function PhoneBar({
             {whatsapp.tickets.length === 0 && (
               <div className="text-slate-500 text-xs">No open WhatsApp tickets</div>
             )}
-            {whatsapp.tickets.map((t) => (
-              <div key={t.id} className="p-3 rounded-2xl bg-[#1e293b]/80 border border-[#334155]/70">
+            {whatsapp.tickets.map((t) => {
+              const st = whatsapp.replyStatus[t.id];
+              const selected = waSel === t.id;
+              return (
+              <div
+                key={t.id}
+                onClick={() => selectWaTicket(t.id)}
+                className={`p-3 rounded-2xl bg-[#1e293b]/80 border cursor-pointer transition ${
+                  selected ? 'border-emerald-400/70 ring-1 ring-emerald-400/50' : 'border-[#334155]/70'
+                }`}
+              >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-white truncate">{t.contactName || t.phone}</span>
                   {t.unreadCount > 0 && (
@@ -849,17 +873,55 @@ export function PhoneBar({
                       : t.status}
                   </span>
                   <button
-                    onClick={() => void openWhatsApp()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void openWhatsApp();
+                    }}
                     className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 transition shrink-0"
                   >
                     Open in Issabel ↗
                   </button>
                 </div>
+                {selected && (
+                  <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                    <textarea
+                      value={waText}
+                      onChange={(e) => setWaText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          if (waText.trim() && st?.state !== 'sending') {
+                            void sendWhatsAppReply(t.id, waText);
+                          }
+                        }
+                      }}
+                      rows={2}
+                      autoFocus
+                      placeholder="Quick reply… (Enter to send, Shift+Enter for a new line)"
+                      className="w-full rounded-xl bg-[#0f172a] border border-[#334155] text-white text-xs p-2 outline-none focus:border-emerald-400/60 resize-none"
+                    />
+                    <div className="flex items-center justify-between mt-1.5 min-h-[24px]">
+                      <span className="text-[10px] text-slate-400">
+                        {st?.state === 'sending' && 'Sending…'}
+                        {st?.state === 'sent' && <span className="text-emerald-300">Queued for sending ✓</span>}
+                        {st?.state === 'error' && <span className="text-red-300">{st.error}</span>}
+                      </span>
+                      <button
+                        onClick={() => void sendWhatsAppReply(t.id, waText)}
+                        disabled={!waText.trim() || st?.state === 'sending'}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-950 text-[11px] font-extrabold transition"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="text-[10px] text-slate-500 mt-3">
-            Read-only — replies are sent from the WhatsApp module in Issabel.
+            Tap a ticket to reply from here — replies go through the WhatsApp module's queue and guardrails, just like the web UI.
           </div>
         </DrawerShell>
       )}

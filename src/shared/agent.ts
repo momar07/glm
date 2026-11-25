@@ -71,11 +71,21 @@ export interface WhatsAppSnapshot {
   assignedTicket: WhatsAppTicket | null;
 }
 
+// The middleware's answer to a quick reply sent from the bar (Phase 2):
+// the reply itself travelled middleware -> WhatsApp service -> the
+// module's outbound queue; this is only the outcome relay.
+export interface WhatsAppReplyResult {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+}
+
 export type AgentServerEvent =
   | { kind: 'ping' }
   | { kind: 'state'; update: AgentStateUpdate }
   | { kind: 'pop'; pop: AgentPop }
   | { kind: 'whatsapp'; update: WhatsAppSnapshot }
+  | { kind: 'whatsapp_result'; result: WhatsAppReplyResult }
   | { kind: 'unknown'; event: string };
 
 export function parseWsUrl(
@@ -115,6 +125,13 @@ export function pongJson(): string {
 
 export function statusChangeJson(extension: string, status: string, reason: string): string {
   return JSON.stringify({ event: 'status_change', extension, status, reason });
+}
+
+// A quick reply from the WhatsApp drawer (Phase 2). The middleware
+// stamps the agent identity from the session — the payload carries
+// only the ticket and the text.
+export function whatsAppReplyJson(ticketId: number, text: string): string {
+  return JSON.stringify({ event: 'whatsapp_reply', ticket_id: ticketId, text });
 }
 
 // The echo of our own change must not restart the status timer.
@@ -295,6 +312,17 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
               createdAt: li.created_at ? String(li.created_at) : null,
             }
           : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_reply_result') {
+    const ticketId = Number(r.ticket_id);
+    return {
+      kind: 'whatsapp_result',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        error: r.error != null ? String(r.error) : null,
       },
     };
   }

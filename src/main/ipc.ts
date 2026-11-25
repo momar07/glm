@@ -127,6 +127,7 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     (s) => getMainWindow()?.webContents.send(IPC.AGENT_STATE, s),
     (p) => getMainWindow()?.webContents.send(IPC.AGENT_POP, p),
     (u) => getMainWindow()?.webContents.send(IPC.AGENT_WHATSAPP, u),
+    (r) => getMainWindow()?.webContents.send(IPC.AGENT_WHATSAPP_RESULT, r),
   );
   const svc = agent;
 
@@ -142,6 +143,11 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.AGENT_OPEN_WHATSAPP, (_e, url: unknown) => {
     if (typeof url !== 'string') throw new Error('invalid url');
     return svc.openWhatsApp(url);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_REPLY, (_e, ticketId: unknown, text: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    if (typeof text !== 'string' || !text.trim()) throw new Error('invalid reply text');
+    svc.whatsAppReply(ticketId, text);
   });
   ipcMain.handle(IPC.AGENT_OPEN_RECORD, (_e, phone: unknown, uid: unknown, baseUrl: unknown) => {
     if (typeof phone !== 'string') throw new Error('invalid phone');
