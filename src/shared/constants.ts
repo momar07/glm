@@ -41,10 +41,12 @@ export const LEVEL_ORDER: Record<LogLevel, number> = {
 
 export const CODEC_LABELS: Record<string, string> = {
   opus: 'Opus',
+  G729: 'G.729',
   G722: 'G.722',
-  PCMU: 'G.711 µ-law',
-  PCMA: 'G.711 A-law',
-  'telephone-event': 'DTMF',
+  PCMU: 'PCMU (ulaw)',
+  PCMA: 'PCMA (alaw)',
+  GSM: 'GSM',
+  'telephone-event': 'DTMF (telephone-event)',
 };
 
 export function genId(prefix = 'id'): string {

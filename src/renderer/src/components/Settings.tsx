@@ -34,6 +34,23 @@ export function Settings(): React.ReactElement {
   const [phoneTones, setPhoneTones] = useState<DeviceRingtone[]>([]);
   // ponytail: undefined = checking, null = non-native/unavailable.
   const [battery, setBattery] = useState<boolean | null | undefined>(undefined);
+  // whether the native SIP helper is installed: decides which codec
+  // candidates the Codecs tab offers (SIP vs WebRTC)
+  const [nativeAvailable, setNativeAvailable] = useState(false);
+
+  useEffect(() => {
+    if (tab !== 'codecs') return;
+    let live = true;
+    void window.api
+      .sipAvailable()
+      .then((v) => {
+        if (live) setNativeAvailable(v);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [tab]);
 
   const checkBattery = (): void => {
     if (!isNative()) {
@@ -290,7 +307,9 @@ export function Settings(): React.ReactElement {
         {tab === 'codecs' && (
           <Card className="p-4 space-y-3">
             <p className="text-xs text-slate-500">
-              Order here is the preference — drag chips to reorder. Applies on the next call.
+              Order here is the preference — drag chips to reorder. WebRTC applies the order on the
+              next call; the native SIP engine applies it at registration, so it takes effect on the
+              next sign-in.
             </p>
             <Field label="Opus quality">
               <Select
@@ -338,7 +357,10 @@ export function Settings(): React.ReactElement {
                   </button>
                 </div>
               ))}
-              {['opus', 'G722', 'PCMU', 'PCMA', 'telephone-event']
+              {(nativeAvailable
+                ? ['G729', 'PCMU', 'PCMA', 'GSM', 'G722']
+                : ['opus', 'G722', 'PCMU', 'PCMA', 'telephone-event']
+              )
                 .filter((c) => !settings.codecs.includes(c))
                 .map((c) => (
                   <button

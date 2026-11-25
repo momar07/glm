@@ -32,15 +32,30 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// G.729 only: Asterisk answers with its own codec order, so offering PCMU as
-// a fallback negotiates PCMU (the endpoint of the box prefers it). A PBX
-// without G.729 fails the call — switch the login to WebRTC there.
-const NATIVE_CODECS = ['G729'];
+// The codecs the native helper (pjsua) can offer. The register command takes
+// the user's preference order from the settings, filtered to these names.
+const NATIVE_CODEC_NAMES = ['G729', 'PCMU', 'PCMA', 'GSM', 'G722'];
+
+// The user's codec preference, reduced to what the native engine knows.
+// Matching is case-insensitive and the result uses the canonical casing
+// above, in the user's order. When nothing matches, fall back to G.729
+// only: Asterisk answers with its own codec order, so offering PCMU as a
+// fallback negotiates PCMU (the endpoint of the box prefers it) — and a
+// registration must never go out with zero codecs.
+function nativeCodecPreference(settings: AppSettings | null): string[] {
+  const picked: string[] = [];
+  for (const name of settings?.codecs ?? []) {
+    const canonical = NATIVE_CODEC_NAMES.find((n) => n.toLowerCase() === name.toLowerCase());
+    if (canonical && !picked.includes(canonical)) picked.push(canonical);
+  }
+  return picked.length > 0 ? picked : ['G729'];
+}
 
 export class NativeEngine {
   private em = new Emitter();
   private _state: SipServiceState = 'disconnected';
   private profile: SipProfile | null = null;
+  private settings: AppSettings | null = null;
   private calls = new Map<string, CallSession>();
   // A state can race the answer of the "call" command: it is replayed when the
   // id is known.
@@ -88,14 +103,17 @@ export class NativeEngine {
     // the helper plays the remote audio through its own sound device
   }
 
-  updateSettings(_settings: AppSettings): void {
-    // the codecs and the devices of a native call are set at registration
+  updateSettings(settings: AppSettings): void {
+    // the codecs and the devices of a native call are set at registration:
+    // keep the freshest settings so the next registration uses them
+    this.settings = settings;
   }
 
   async initialize(profile: SipProfile, settings: AppSettings): Promise<void> {
     this.generation += 1;
     const generation = this.generation;
     this.profile = profile;
+    this.settings = settings;
     this.unsubscribe?.();
     this.unsubscribe = window.api.onSipEvent((event) => {
       if (generation === this.generation) this.handle(event);
@@ -111,7 +129,7 @@ export class NativeEngine {
         extension: profile.username,
         password: profile.password,
         transport: profile.transport ?? 'udp',
-        codecs: NATIVE_CODECS,
+        codecs: nativeCodecPreference(this.settings),
       });
       if (this._state === 'connecting') this.setState('registering');
     } catch (error) {
@@ -121,7 +139,6 @@ export class NativeEngine {
       throw error;
     }
     this.em.emit('log', 'info', `native engine: ${profile.username}@${profile.sipDomain}`);
-    void settings; // kept for parity with the WebRTC engine's signature
   }
 
   async cancelConnect(): Promise<void> {
