@@ -560,7 +560,16 @@ export function PhoneBar({
               <div key={q} className="p-3 rounded-2xl bg-[#1e293b]/85 border border-[#334155]/80 flex items-center justify-between">
                 <div>
                   <div className="font-bold text-white flex items-center gap-1.5">
-                    <span className="font-mono text-indigo-300">{q}</span> • Queue
+                    {agent.queueNames?.[q] ? (
+                      <>
+                        <span className="truncate">{agent.queueNames[q]}</span>
+                        <span className="font-mono text-indigo-300 text-xs shrink-0">{q}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-mono text-indigo-300">{q}</span> • Queue
+                      </>
+                    )}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
                     {agent.connected ? 'Middleware connected' : 'Middleware reconnecting…'}

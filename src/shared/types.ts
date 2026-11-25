@@ -145,6 +145,7 @@ export interface AgentState {
   status: AgentStatus;
   reason: string;
   queues: string[];
+  queueNames: Record<string, string>;
   pauseReasons: string[];
   loginAtMs: number;
   statusAtMs: number;

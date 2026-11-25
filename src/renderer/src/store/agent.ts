@@ -13,6 +13,7 @@ const BLANK_STATE: AgentState = {
   status: 'offline',
   reason: '',
   queues: [],
+  queueNames: {},
   pauseReasons: [],
   loginAtMs: 0,
   statusAtMs: 0,

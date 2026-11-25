@@ -8,6 +8,7 @@ export interface AgentLoginResult {
   port: number;
   domain: string;
   queues: string[];
+  queueNames: Record<string, string>;
   pauseReasons: string[];
   token: string;
   timestamp: number;
@@ -170,6 +171,14 @@ function strArr(v: unknown): string[] | undefined {
   return Array.isArray(v) ? v.map((x) => String(x)) : undefined;
 }
 
+function strMap(v: unknown): Record<string, string> | undefined {
+  const r = asRecord(v);
+  if (!r) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(r)) out[k] = String(val);
+  return out;
+}
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
     ? (v as Record<string, unknown>)
@@ -193,6 +202,7 @@ export function parseLoginResponse(raw: unknown, apiUrl: string, wsPath = '/ws')
     port: Number.isFinite(port) && port > 0 ? port : 5060,
     domain: String(r.sip_domain ?? '') || server,
     queues: strArr(r.assigned_queues) ?? [],
+    queueNames: strMap(r.queue_names) ?? {},
     pauseReasons: strArr(r.pause_reasons) ?? [],
     token,
     timestamp: Number(r.timestamp) || 0,
