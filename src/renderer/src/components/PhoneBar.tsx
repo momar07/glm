@@ -21,6 +21,7 @@ type Drawer =
   | 'settings'
   | 'applogs'
   | 'contactsFull'
+  | 'whatsapp'
   | null;
 
 const KEYS: { d: string; sub: string }[] = [
@@ -80,6 +81,8 @@ export function PhoneBar({
   const agentSetStatus = useAgent((s) => s.setStatus);
   const agentLogout = useAgent((s) => s.logout);
   const pop = useAgent((s) => s.pop);
+  const whatsapp = useAgent((s) => s.whatsapp);
+  const openWhatsApp = useAgent((s) => s.openWhatsApp);
   const contacts = useContacts((s) => s.contacts);
 
   const [drawer, setDrawer] = useState<Drawer>(null);
@@ -94,7 +97,28 @@ export function PhoneBar({
   const [contactQ, setContactQ] = useState('');
   const [dtmfDigits, setDtmfDigits] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [waToast, setWaToast] = useState(false);
   const [now, setNow] = useState(Date.now());
+
+  // WhatsApp assignment toast: appears when the store stamps a NEW
+  // assignment (lastAssignedAt changes), auto-dismisses after ~6s, and
+  // clicking it opens the WhatsApp drawer. Quiet by design — no sound,
+  // no focus steal; the ref guard keeps re-renders from re-toasting.
+  const waToastSeenRef = useRef(0);
+  useEffect(() => {
+    if (!whatsapp.lastAssigned || whatsapp.lastAssignedAt <= 0) return;
+    if (whatsapp.lastAssignedAt === waToastSeenRef.current) return;
+    waToastSeenRef.current = whatsapp.lastAssignedAt;
+    setWaToast(true);
+    const t = setTimeout(() => setWaToast(false), 6000);
+    return () => clearTimeout(t);
+  }, [whatsapp.lastAssigned, whatsapp.lastAssignedAt]);
+
+  // The toast is a fixed overlay like the logout card: fit the window to
+  // it in a layout effect, and shrink back the frame it disappears.
+  useLayoutEffect(() => {
+    onFitRequest?.();
+  }, [waToast, onFitRequest]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -514,6 +538,20 @@ export function PhoneBar({
                 </svg>
                 <span>Keypad</span>
               </button>
+              {agent.loggedIn && whatsapp.seen && (
+                <button
+                  onClick={() => toggleDrawer('whatsapp')}
+                  className={`${toggleBtnCls(drawer === 'whatsapp')} relative`}
+                  title="WhatsApp tickets"
+                >
+                  <WhatsAppGlyph className="w-4 h-4 text-emerald-400" />
+                  {whatsapp.unreadTotal > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-emerald-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center ring-2 ring-[#0f172a]">
+                      {whatsapp.unreadTotal > 99 ? '99+' : whatsapp.unreadTotal}
+                    </span>
+                  )}
+                </button>
+              )}
               <button onClick={() => toggleDrawer('logs')} className={toggleBtnCls(drawer === 'logs')} title="Call logs">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -777,6 +815,79 @@ export function PhoneBar({
         </DrawerShell>
       )}
 
+      {/* WhatsApp tickets — Phase 1 READ-ONLY: opening this drawer never
+          marks anything read and there is no composer; replies happen in
+          the WhatsApp module inside Issabel. */}
+      {drawer === 'whatsapp' && agent.loggedIn && (
+        <DrawerShell width="max-w-[400px]" title="WhatsApp Tickets" dot="bg-emerald-400" onClose={() => setDrawer(null)}>
+          <button
+            onClick={() => void openWhatsApp()}
+            className="w-full mb-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition"
+          >
+            Open in Issabel
+          </button>
+          <div className="space-y-2 max-h-[320px] overflow-y-auto drawer-scroll pr-1">
+            {whatsapp.tickets.length === 0 && (
+              <div className="text-slate-500 text-xs">No open WhatsApp tickets</div>
+            )}
+            {whatsapp.tickets.map((t) => (
+              <div key={t.id} className="p-3 rounded-2xl bg-[#1e293b]/80 border border-[#334155]/70">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-white truncate">{t.contactName || t.phone}</span>
+                  {t.unreadCount > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-extrabold flex items-center justify-center shrink-0">
+                      {t.unreadCount}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono truncate mt-0.5">{t.phone}</div>
+                {t.preview && <div className="text-[11px] text-slate-300 truncate mt-1">{t.preview}</div>}
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-[10px] font-semibold text-slate-500">
+                    {t.unreadCount > 0 && t.waitingSeconds > 0
+                      ? `Waiting ${fmtHMS(t.waitingSeconds)}`
+                      : t.status}
+                  </span>
+                  <button
+                    onClick={() => void openWhatsApp()}
+                    className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 transition shrink-0"
+                  >
+                    Open in Issabel ↗
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="text-[10px] text-slate-500 mt-3">
+            Read-only — replies are sent from the WhatsApp module in Issabel.
+          </div>
+        </DrawerShell>
+      )}
+
+      {/* ======================= WHATSAPP ASSIGNMENT TOAST ======================= */}
+      {waToast && whatsapp.lastAssigned && (
+        <div className="fixed inset-x-0 top-[64px] z-[70] flex justify-center px-3 pointer-events-none">
+          <div
+            onClick={() => {
+              setWaToast(false);
+              setDrawer('whatsapp');
+            }}
+            className="app-no-drag pointer-events-auto w-full max-w-[340px] rounded-3xl bg-[#0f172a]/95 backdrop-blur-2xl border border-emerald-500/30 p-3 shadow-2xl drawer-animate cursor-pointer flex items-center gap-2.5"
+          >
+            <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <WhatsAppGlyph className="w-4 h-4 text-emerald-300" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-white truncate">New WhatsApp ticket assigned</div>
+              <div className="text-[11px] text-slate-400 truncate">
+                {whatsapp.lastAssigned.contactName || whatsapp.lastAssigned.phone}
+                {whatsapp.lastAssigned.preview ? ` — ${whatsapp.lastAssigned.preview}` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ======================= LOGOUT CONFIRM ======================= */}
       {logoutOpen && (
         <>
@@ -848,6 +959,21 @@ export function PhoneBar({
         </>
       )}
     </div>
+  );
+}
+
+// WhatsApp-style glyph: a chat bubble (with tail) carrying the same
+// handset path the active-call bar uses. Inline SVG, no emoji.
+function WhatsAppGlyph({ className }: { className?: string }): React.ReactElement {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2a10 10 0 0 0-8.55 15.13L2 22l5.05-1.32A10 10 0 1 0 12 2Z" />
+      <path
+        fill="#0f172a"
+        transform="translate(6.4 6.4) scale(0.483)"
+        d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24 11.4 11.4 0 0 0 3.57.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1.02l-2.2 2.2Z"
+      />
+    </svg>
   );
 }
 

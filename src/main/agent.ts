@@ -19,6 +19,7 @@ import type {
   AgentPopEvent,
   AgentProfile,
   AgentState,
+  AgentWhatsAppEvent,
 } from '../shared/types';
 import { mainLog } from './logger';
 
@@ -63,6 +64,7 @@ export class AgentService {
   constructor(
     private emitState: (s: AgentState) => void,
     private emitPop: (p: AgentPopEvent) => void,
+    private emitWhatsApp: (u: AgentWhatsAppEvent) => void,
   ) {}
 
   snapshot(): AgentState {
@@ -166,6 +168,17 @@ export class AgentService {
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 
+  // Opens the WhatsApp module inside Issabel (system browser). The URL is
+  // built by the renderer from the middleware base (issabelModuleUrl);
+  // only http(s) URLs are ever handed to the shell.
+  async openWhatsApp(url: string): Promise<void> {
+    if (!this.session) throw new Error('not logged in');
+    const u = String(url || '').trim();
+    if (!/^https?:\/\//i.test(u)) throw new Error('invalid url');
+    await shell.openExternal(u);
+    mainLog('info', 'agent', 'opened the WhatsApp module in Issabel');
+  }
+
   async openRecord(phone: string, uid: string, baseUrl?: string): Promise<void> {
     if (!this.session) throw new Error('not logged in');
     const page = workspaceUrl(String(baseUrl ?? this.session.crmBaseUrl).trim(), phone, uid);
@@ -239,6 +252,12 @@ export class AgentService {
     }
     if (ev.kind === 'pop') {
       this.emitPop({ ...ev.pop, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp') {
+      // Phase 1: forwarded to the renderer store as-is; the bar renders
+      // it read-only (badge / toast / drawer), nothing is sent back.
+      this.emitWhatsApp({ ...ev.update, receivedAt: Date.now() });
       return;
     }
     if (ev.kind !== 'state') return;

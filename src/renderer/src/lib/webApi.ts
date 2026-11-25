@@ -106,8 +106,10 @@ export function createWebApi(): MainApi {
     agentLogout: async () => {},
     agentSetStatus: async () => {},
     agentOpenRecord: async () => {},
+    agentOpenWhatsApp: async () => {},
     onAgentState: () => () => {},
     onAgentPop: () => () => {},
+    onAgentWhatsApp: () => () => {},
     setTrustedHost: async () => {},
     // The native engine is a Windows helper of the desktop app.
     sipAvailable: async () => false,

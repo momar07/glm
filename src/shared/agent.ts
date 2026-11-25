@@ -50,10 +50,32 @@ export interface AgentStateUpdate {
   timestamp?: number;
 }
 
+// WhatsApp phonebar integration, Phase 1 (notify only): the middleware
+// forwards the WhatsApp service's per-agent unread snapshots as
+// whatsapp_update events on this same socket. The bar shows them read-only
+// (badge, assignment toast, tickets drawer) — no replies, no state changes.
+export interface WhatsAppTicket {
+  id: number;
+  contactName: string;
+  phone: string;
+  preview: string;
+  unreadCount: number;
+  status: string;
+  waitingSeconds: number;
+}
+
+export interface WhatsAppSnapshot {
+  kind: 'snapshot' | 'assigned';
+  unreadTotal: number;
+  tickets: WhatsAppTicket[];
+  assignedTicket: WhatsAppTicket | null;
+}
+
 export type AgentServerEvent =
   | { kind: 'ping' }
   | { kind: 'state'; update: AgentStateUpdate }
   | { kind: 'pop'; pop: AgentPop }
+  | { kind: 'whatsapp'; update: WhatsAppSnapshot }
   | { kind: 'unknown'; event: string };
 
 export function parseWsUrl(
@@ -123,6 +145,15 @@ export function urlEncode(s: string): string {
     }
   }
   return out;
+}
+
+// The Issabel web UI lives on the same box as the middleware: same host,
+// over HTTPS on the default port (the middleware apiUrl carries its own
+// port, usually :8080). The WhatsApp module is a menu item inside that UI.
+export function issabelModuleUrl(apiUrl: string): string {
+  const u = parseWsUrl(apiUrl);
+  if (!u) return '';
+  return `https://${u.host}/index.php?menu=omnichannel_whatsapp`;
 }
 
 export function workspaceUrl(baseUrl: string, phone: string, uid: string): string {
@@ -264,6 +295,35 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
               createdAt: li.created_at ? String(li.created_at) : null,
             }
           : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_update') {
+    const parseTicket = (v: unknown): WhatsAppTicket | null => {
+      const t = asRecord(v);
+      if (!t) return null;
+      const id = Number(t.id);
+      if (!Number.isFinite(id)) return null;
+      return {
+        id,
+        contactName: String(t.contact_name ?? ''),
+        phone: String(t.phone ?? ''),
+        preview: String(t.preview ?? ''),
+        unreadCount: Number(t.unread_count) || 0,
+        status: String(t.status ?? ''),
+        waitingSeconds: Number(t.waiting_seconds) || 0,
+      };
+    };
+    const tickets = Array.isArray(r.tickets)
+      ? r.tickets.map(parseTicket).filter((t): t is WhatsAppTicket => t !== null)
+      : [];
+    return {
+      kind: 'whatsapp',
+      update: {
+        kind: r.kind === 'assigned' ? 'assigned' : 'snapshot',
+        unreadTotal: Number(r.unread_total) || 0,
+        tickets,
+        assignedTicket: parseTicket(r.assigned_ticket),
       },
     };
   }

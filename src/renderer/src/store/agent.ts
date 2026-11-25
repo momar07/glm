@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { parseWsUrl } from '@shared/agent';
+import { issabelModuleUrl, parseWsUrl } from '@shared/agent';
+import type { WhatsAppTicket } from '@shared/agent';
 import type { AgentPopEvent, AgentProfile, AgentState } from '@shared/types';
 import { logger } from '../lib/logger';
 import { useSip } from './sip';
@@ -102,10 +103,30 @@ function saveForm(f: SavedForm): void {
   }
 }
 
+// WhatsApp phonebar state (Phase 1, read-only). `seen` stays false until
+// the first whatsapp_update arrives in this session: with the integration
+// off on the server, the bar shows no WhatsApp UI at all (no dead button).
+export interface WhatsAppBarState {
+  seen: boolean;
+  unreadTotal: number;
+  tickets: WhatsAppTicket[];
+  lastAssigned: WhatsAppTicket | null;
+  lastAssignedAt: number;
+}
+
+const BLANK_WHATSAPP: WhatsAppBarState = {
+  seen: false,
+  unreadTotal: 0,
+  tickets: [],
+  lastAssigned: null,
+  lastAssignedAt: 0,
+};
+
 interface AgentStore {
   state: AgentState;
   profile: AgentProfile | null;
   pop: AgentPopEvent | null;
+  whatsapp: WhatsAppBarState;
   apiUrl: string;
   serverIp: string;
   crmBaseUrl: string;
@@ -125,6 +146,7 @@ interface AgentStore {
   setStatus: (status: 'available' | 'pause', reason: string) => Promise<void>;
   clearPop: () => void;
   openRecord: (phone: string, uid: string) => Promise<void>;
+  openWhatsApp: () => Promise<void>;
 }
 
 let bound = false;
@@ -135,6 +157,7 @@ export const useAgent = create<AgentStore>((set, get) => {
     state: BLANK_STATE,
     profile: null,
     pop: null,
+    whatsapp: BLANK_WHATSAPP,
     apiUrl: saved.apiUrl,
     serverIp: saved.serverIp,
     crmBaseUrl: saved.crmBaseUrl,
@@ -155,6 +178,20 @@ export const useAgent = create<AgentStore>((set, get) => {
       window.api.onAgentPop((p) => {
         set({ pop: p });
         logger.info('agent', `CRM pop for ${p.callerId}${p.isNew ? ' (new caller)' : ''}`);
+      });
+      window.api.onAgentWhatsApp((u) => {
+        set((cur) => ({
+          whatsapp: {
+            seen: true,
+            unreadTotal: u.unreadTotal,
+            tickets: u.tickets,
+            lastAssigned:
+              u.kind === 'assigned' && u.assignedTicket ? u.assignedTicket : cur.whatsapp.lastAssigned,
+            lastAssignedAt:
+              u.kind === 'assigned' && u.assignedTicket ? u.receivedAt : cur.whatsapp.lastAssignedAt,
+          },
+        }));
+        logger.info('agent', `WhatsApp update: ${u.unreadTotal} unread across ${u.tickets.length} tickets`);
       });
     },
 
@@ -224,6 +261,7 @@ export const useAgent = create<AgentStore>((set, get) => {
           state: out.state,
           profile: out.profile,
           pop: null,
+          whatsapp: BLANK_WHATSAPP,
           apiUrl,
           serverIp: form.serverIp,
           username: form.username.trim(),
@@ -251,7 +289,7 @@ export const useAgent = create<AgentStore>((set, get) => {
       // the SIP registration of the agent goes with the agent session
       await useSip.getState().disconnect().catch(() => {});
       await window.api.agentLogout().catch(() => {});
-      set({ state: BLANK_STATE, profile: null, pop: null });
+      set({ state: BLANK_STATE, profile: null, pop: null, whatsapp: BLANK_WHATSAPP });
       logger.info('agent', 'logged out');
     },
 
@@ -268,6 +306,22 @@ export const useAgent = create<AgentStore>((set, get) => {
 
     clearPop() {
       set({ pop: null });
+    },
+
+    // Opens the WhatsApp module inside Issabel in the system browser. The
+    // module lives on the same box the agent logged into: the URL is
+    // derived from the middleware base (apiUrl), never stored separately.
+    async openWhatsApp() {
+      const url = issabelModuleUrl(get().apiUrl);
+      if (!url) {
+        logger.error('agent', 'cannot derive the Issabel URL from the middleware URL');
+        return;
+      }
+      try {
+        await window.api.agentOpenWhatsApp(url);
+      } catch (e) {
+        logger.error('agent', `opening WhatsApp in Issabel failed: ${e instanceof Error ? e.message : e}`);
+      }
     },
 
     async openRecord(phone, uid) {

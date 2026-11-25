@@ -1,6 +1,6 @@
 // Shared types used across main, preload, and renderer processes.
 
-import type { AgentCustomer, AgentInteraction } from './agent';
+import type { AgentCustomer, AgentInteraction, WhatsAppTicket } from './agent';
 import type { SipEngineEvent, SipHelperAnswer, SipHelperCommand } from './sipHelper';
 
 export type Presence =
@@ -182,6 +182,15 @@ export interface AgentPopEvent {
   receivedAt: number;
 }
 
+// A whatsapp_update forwarded by the middleware (Phase 1, read-only).
+export interface AgentWhatsAppEvent {
+  kind: 'snapshot' | 'assigned';
+  unreadTotal: number;
+  tickets: WhatsAppTicket[];
+  assignedTicket: WhatsAppTicket | null;
+  receivedAt: number;
+}
+
 // IPC channel map — single source of truth for main<->preload<->renderer.
 export const IPC = {
   SETTINGS_GET: 'settings:get',
@@ -201,8 +210,10 @@ export const IPC = {
   AGENT_LOGOUT: 'agent:logout',
   AGENT_STATUS: 'agent:status',
   AGENT_OPEN_RECORD: 'agent:open-record',
+  AGENT_OPEN_WHATSAPP: 'agent:open-whatsapp',
   AGENT_STATE: 'agent:state',
   AGENT_POP: 'agent:pop',
+  AGENT_WHATSAPP: 'agent:whatsapp',
   SIP_AVAILABLE: 'sip:available',
   SIP_COMMAND: 'sip:command',
   SIP_EVENT: 'sip:event',
@@ -236,8 +247,10 @@ export interface MainApi {
   agentLogout(): Promise<void>;
   agentSetStatus(status: 'available' | 'pause', reason: string): Promise<void>;
   agentOpenRecord(phone: string, uid: string, baseUrl?: string): Promise<void>;
+  agentOpenWhatsApp(url: string): Promise<void>;
   onAgentState(cb: (s: AgentState) => void): () => void;
   onAgentPop(cb: (p: AgentPopEvent) => void): () => void;
+  onAgentWhatsApp(cb: (u: AgentWhatsAppEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
   // The native engine (the sip-helper.exe of Windows). Available only when the
   // helper was built for this install.

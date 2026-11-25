@@ -126,6 +126,7 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
   agent = new AgentService(
     (s) => getMainWindow()?.webContents.send(IPC.AGENT_STATE, s),
     (p) => getMainWindow()?.webContents.send(IPC.AGENT_POP, p),
+    (u) => getMainWindow()?.webContents.send(IPC.AGENT_WHATSAPP, u),
   );
   const svc = agent;
 
@@ -137,6 +138,10 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
   ipcMain.handle(IPC.AGENT_STATUS, (_e, status: unknown, reason: unknown) => {
     if (status !== 'available' && status !== 'pause') throw new Error('invalid agent status');
     svc.setStatus(status, typeof reason === 'string' ? reason : '');
+  });
+  ipcMain.handle(IPC.AGENT_OPEN_WHATSAPP, (_e, url: unknown) => {
+    if (typeof url !== 'string') throw new Error('invalid url');
+    return svc.openWhatsApp(url);
   });
   ipcMain.handle(IPC.AGENT_OPEN_RECORD, (_e, phone: unknown, uid: unknown, baseUrl: unknown) => {
     if (typeof phone !== 'string') throw new Error('invalid phone');
