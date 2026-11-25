@@ -93,6 +93,7 @@ export function PhoneBar({
   const [transferTarget, setTransferTarget] = useState('');
   const [contactQ, setContactQ] = useState('');
   const [dtmfDigits, setDtmfDigits] = useState('');
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -206,10 +207,32 @@ export function PhoneBar({
   };
 
   const logout = (): void => {
-    if (!window.confirm('Log out? Any active call will end.')) return;
+    setLogoutOpen(true);
+  };
+
+  const confirmLogout = (): void => {
+    setLogoutOpen(false);
     if (agent.loggedIn) void agentLogout();
     else void disconnect();
   };
+
+  // The logout card is a fixed overlay (the same positioning pattern as
+  // the incoming-call panel): fit in a layout effect so the window is
+  // already sized to the card when it paints, and shrinks back the same
+  // frame the card closes — no flicker, no second step.
+  useLayoutEffect(() => {
+    onFitRequest?.();
+  }, [logoutOpen, onFitRequest]);
+
+  // Escape cancels the logout card, like clicking the backdrop.
+  useEffect(() => {
+    if (!logoutOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setLogoutOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [logoutOpen]);
 
   const dialNumber = (num: string): void => {
     if (!num) return;
@@ -237,6 +260,12 @@ export function PhoneBar({
     const parts = callerName.trim().split(/\s+/).filter(Boolean);
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return callerName.slice(0, 2).toUpperCase();
+  })();
+  // Agent initials for the logout card avatar, same rule as the caller's.
+  const agentInitials = ((): string => {
+    const parts = displayName.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return displayName.slice(0, 2).toUpperCase();
   })();
   // Queue attribution: neither the call session nor the CRM pop carries a
   // per-call queue — the middleware only ever sends the agent's assigned
@@ -734,6 +763,77 @@ export function PhoneBar({
             <Contacts />
           </div>
         </DrawerShell>
+      )}
+
+      {/* ======================= LOGOUT CONFIRM ======================= */}
+      {logoutOpen && (
+        <>
+          <div
+            className="app-no-drag fixed inset-0 z-[60] bg-slate-950/60"
+            onClick={() => setLogoutOpen(false)}
+          />
+          <div className="fixed inset-x-0 top-[64px] z-[70] flex justify-center px-3 pointer-events-none">
+            <div className="app-no-drag pointer-events-auto w-full max-w-[340px] rounded-3xl bg-[#0f172a]/95 backdrop-blur-2xl border border-slate-700/80 p-4 shadow-2xl drawer-animate">
+              <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-500 to-indigo-500 flex items-center justify-center text-[13px] font-extrabold text-white shrink-0">
+                  {agentInitials}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-bold text-white truncate">
+                    {displayName}
+                    {extLabel && <span className="text-slate-400 font-semibold"> · ext {extLabel}</span>}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        agentPaused ? 'bg-amber-400' : 'bg-emerald-400'
+                      }`}
+                    />
+                    <span className="truncate">{statusLabel}</span>
+                    {agent.loggedIn && (
+                      <span className="font-mono font-bold text-slate-300 shrink-0">
+                        {fmtHMS(statusSecs)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {call && (
+                <div className="mt-3 flex items-center gap-2 rounded-2xl bg-danger-600/15 border border-danger-600/30 px-3 py-2 text-[11px] font-semibold text-rose-300">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="min-w-0 truncate">
+                    Call with {callerName || remoteNumber}
+                    {inCall && (
+                      <>
+                        {' · '}
+                        <span className="font-mono font-bold">{fmtHMS(elapsed)}</span>
+                      </>
+                    )}{' '}
+                    will end
+                  </span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <button
+                  onClick={() => setLogoutOpen(false)}
+                  className="py-2 rounded-2xl bg-[#1e293b] hover:bg-slate-700 border border-[#334155] text-slate-200 text-xs font-bold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="py-2 rounded-2xl bg-danger-600 hover:bg-danger-500 text-white text-xs font-extrabold shadow-lg shadow-danger-600/25 transition"
+                >
+                  Log out
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -25,7 +25,6 @@ const TABS: { id: TabId; label: string }[] = [
 export function Settings(): React.ReactElement {
   const { settings, patch, upsertProfile } = useSettings();
   const agent = useAgent();
-  const disconnect = useSip((s) => s.disconnect);
   const presence = useSip((s) => s.presence);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [level, setLevel] = useState(0);
@@ -135,18 +134,7 @@ export function Settings(): React.ReactElement {
           <Card className="p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-400">{presence === 'offline' ? 'Not connected' : `Connected — ${presence}`}</span>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => {
-                  if (window.confirm('Disconnect and logout? Any active call will end.')) void disconnect();
-                }}
-                disabled={presence === 'offline'}
-              >
-                Logout
-              </Button>
             </div>
-            <p className="text-xs text-slate-500">Disconnects SIP, hangs up active calls, and returns to Login. Profiles are kept.</p>
             {(() => {
               const active = settings.profiles.find((p) => p.id === settings.activeProfileId);
               if (!active) return null;
