@@ -121,6 +121,14 @@ export function IncomingCall(): React.ReactElement {
             <p className="text-xs text-slate-300 font-medium mt-0.5 font-mono truncate">
               {incoming.remote.replace(/^sip:/, '')}
             </p>
+            {card?.queueName && (
+              <span
+                className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold max-w-full truncate"
+                title={`Queue ${card.queueName}`}
+              >
+                {card.queueName}
+              </span>
+            )}
           </div>
           <div className="h-11 w-11 shrink-0 rounded-full bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-sm font-bold text-emerald-300 animate-pulseRing">
             {remoteLabel.slice(0, 2).toUpperCase()}
