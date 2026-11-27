@@ -199,6 +199,14 @@ export function WhatsAppChatApp(): React.ReactElement {
     if (replyState?.state === 'sent') setText('');
   }, [replyState]);
 
+  // Opened without a specific ticket (the bar's WhatsApp button):
+  // land on the most recent conversation as soon as the list is in.
+  useEffect(() => {
+    if (ticketId == null && whatsapp.tickets.length > 0) {
+      void requestWhatsAppThread(whatsapp.tickets[0].id);
+    }
+  }, [ticketId, whatsapp.tickets, requestWhatsAppThread]);
+
   // Live refresh: when the snapshot says the open conversation moved
   // (new inbound, new preview, status change elsewhere), pull the
   // thread again. The fetch marks it read, so this settles instead of

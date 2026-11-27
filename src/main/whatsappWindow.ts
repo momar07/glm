@@ -39,14 +39,27 @@ function positionBelowBar(win: BrowserWindow, bar: BrowserWindow | null): void {
   win.setBounds({ x, y, width, height });
 }
 
-export function openWhatsAppChat(getBar: () => BrowserWindow | null, ticketId: number): void {
-  pendingTicketId = ticketId;
+// `prime` runs once, right after the window's renderer has loaded and
+// BEFORE the focus event: a window created after login missed every
+// state/snapshot emission, so the caller replays the current agent
+// state and the last WhatsApp snapshot into it — without that it sits
+// on its blank store and reports "Not logged in" (the v5.24 bug the
+// pause-toggle accidentally proved: a status change re-emitted the
+// state and the window woke up).
+export function openWhatsAppChat(
+  getBar: () => BrowserWindow | null,
+  ticketId: number,
+  prime?: (win: BrowserWindow) => void,
+): void {
+  pendingTicketId = ticketId > 0 ? ticketId : null;
   const existing = getWhatsAppWindow();
   if (existing) {
     if (existing.isMinimized()) existing.restore();
     existing.show();
     existing.focus();
-    existing.webContents.send(IPC.AGENT_WHATSAPP_FOCUS, { ticketId });
+    if (pendingTicketId != null) {
+      existing.webContents.send(IPC.AGENT_WHATSAPP_FOCUS, { ticketId: pendingTicketId });
+    }
     return;
   }
 
@@ -83,6 +96,7 @@ export function openWhatsAppChat(getBar: () => BrowserWindow | null, ticketId: n
     return { action: 'deny' };
   });
   win.webContents.on('did-finish-load', () => {
+    if (prime) prime(win);
     if (pendingTicketId != null) {
       win.webContents.send(IPC.AGENT_WHATSAPP_FOCUS, { ticketId: pendingTicketId });
     }

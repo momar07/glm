@@ -554,9 +554,9 @@ export function PhoneBar({
               </button>
               {agent.loggedIn && (
                 <button
-                  onClick={() => toggleDrawer('whatsapp')}
-                  className={`${toggleBtnCls(drawer === 'whatsapp')} relative`}
-                  title="WhatsApp tickets"
+                  onClick={() => void openWhatsAppChat(whatsapp.tickets[0]?.id ?? 0)}
+                  className={`${toggleBtnCls(false)} relative`}
+                  title="WhatsApp — open the chat window"
                 >
                   <WhatsAppGlyph className="w-4 h-4 text-emerald-400" />
                   {whatsapp.unreadTotal > 0 && (
@@ -829,11 +829,13 @@ export function PhoneBar({
         </DrawerShell>
       )}
 
-      {/* WhatsApp tickets — Phase 2: tap a ticket to open its quick
-          reply. The reply rides the agent session to the middleware and
-          into the WhatsApp module's own send path (queue + guardrails),
-          exactly like a reply typed in Issabel. Opening this drawer
-          still never marks anything read. */}
+      {/* WhatsApp tickets drawer — DORMANT since v5.24.1: the bar's
+          WhatsApp button and the assignment toast now open the chat
+          window directly, at the user's call. The drawer (with its
+          Phase 2 quick reply) is kept intact on purpose — it is the
+          quick-reply surface if that is ever wanted back; nothing
+          routes to it today. Its ticket click still also opens the
+          chat window. */}
       {drawer === 'whatsapp' && agent.loggedIn && (
         <DrawerShell width="max-w-[400px]" title="WhatsApp Tickets" dot="bg-emerald-400" onClose={() => setDrawer(null)}>
           <button
@@ -939,7 +941,7 @@ export function PhoneBar({
           <div
             onClick={() => {
               setWaToast(false);
-              setDrawer('whatsapp');
+              if (whatsapp.lastAssigned) void openWhatsAppChat(whatsapp.lastAssigned.id);
             }}
             className="app-no-drag pointer-events-auto w-full max-w-[340px] rounded-3xl bg-[#0f172a]/95 backdrop-blur-2xl border border-emerald-500/30 p-3 shadow-2xl drawer-animate cursor-pointer flex items-center gap-2.5"
           >

@@ -1,5 +1,5 @@
 import { ipcMain, Notification, app, dialog, BrowserWindow } from 'electron';
-import { IPC, type AppSettings, type LogEntry, type NotifyOptions } from '../shared/types';
+import { IPC, type AgentWhatsAppEvent, type AppSettings, type LogEntry, type NotifyOptions } from '../shared/types';
 import type { AgentLoginRequest } from '../shared/types';
 import { settingsStore } from './store';
 import { fileLogger, mainLog } from './logger';
@@ -133,10 +133,16 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     getMainWindow()?.webContents.send(channel, payload);
     getWhatsAppWindow()?.webContents.send(channel, payload);
   };
+  // The last WhatsApp snapshot, cached so a chat window created after
+  // login can be primed with it (see whatsappWindow.openWhatsAppChat).
+  let lastWhatsApp: AgentWhatsAppEvent | null = null;
   agent = new AgentService(
     (s) => sendAll(IPC.AGENT_STATE, s),
     (p) => getMainWindow()?.webContents.send(IPC.AGENT_POP, p),
-    (u) => sendAll(IPC.AGENT_WHATSAPP, u),
+    (u) => {
+      lastWhatsApp = u;
+      sendAll(IPC.AGENT_WHATSAPP, u);
+    },
     (r) => sendAll(IPC.AGENT_WHATSAPP_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_THREAD_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_STATUS_RESULT, r),
@@ -148,6 +154,7 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     return svc.login(req);
   });
   ipcMain.handle(IPC.AGENT_LOGOUT, () => {
+    lastWhatsApp = null;
     closeWhatsAppChat();
     return svc.logout();
   });
@@ -175,7 +182,12 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
   });
   ipcMain.handle(IPC.AGENT_WHATSAPP_OPEN_CHAT, (_e, ticketId: unknown) => {
     if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
-    openWhatsAppChat(getMainWindow, ticketId);
+    // ticketId 0 = just open the window (the bar's WhatsApp button);
+    // the window then auto-selects the most recent conversation.
+    openWhatsAppChat(getMainWindow, ticketId, (win) => {
+      win.webContents.send(IPC.AGENT_STATE, svc.snapshot());
+      if (lastWhatsApp) win.webContents.send(IPC.AGENT_WHATSAPP, lastWhatsApp);
+    });
   });
   // The chat window's own frame buttons act on the sender's window —
   // never on the bar (APP_MINIMIZE targets the bar by design).
