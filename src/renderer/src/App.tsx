@@ -6,13 +6,26 @@ import { audioManager } from './audio/AudioManager';
 import { onForeground } from './lib/lifecycle';
 import { useWindowFit } from './lib/useWindowFit';
 import { PhoneBar } from './components/PhoneBar';
+import { WhatsAppChatApp } from './components/WhatsAppChat';
 import { BatteryPrompt } from './components/BatteryPrompt';
 import { AgentLogin } from './components/AgentLogin';
 import { IncomingCall } from './components/IncomingCall';
 import { useAgent } from './store/agent';
 import { logger } from './lib/logger';
 
+// The WhatsApp chat window (v5.24) loads this same renderer bundle
+// with ?wa=chat in a separate BrowserWindow: its own surface (customer
+// list + full conversation), no phonebar and no SIP. The flag is fixed
+// for the life of the window, so this branch never flips mid-render.
+const IS_WA_CHAT =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('wa') === 'chat';
+
 export default function App(): React.ReactElement {
+  if (IS_WA_CHAT) return <WhatsAppChatApp />;
+  return <PhonebarApp />;
+}
+
+function PhonebarApp(): React.ReactElement {
   const loaded = useSettings((s) => s.loaded);
   const load = useSettings((s) => s.load);
   const settings = useSettings((s) => s.settings);

@@ -83,6 +83,7 @@ export function PhoneBar({
   const pop = useAgent((s) => s.pop);
   const whatsapp = useAgent((s) => s.whatsapp);
   const openWhatsApp = useAgent((s) => s.openWhatsApp);
+  const openWhatsAppChat = useAgent((s) => s.openWhatsAppChat);
   const sendWhatsAppReply = useAgent((s) => s.sendWhatsAppReply);
   const contacts = useContacts((s) => s.contacts);
 
@@ -839,7 +840,7 @@ export function PhoneBar({
             onClick={() => void openWhatsApp()}
             className="w-full mb-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold transition"
           >
-            Open in Issabel
+            Open in Nero
           </button>
           <div className="space-y-2 max-h-[320px] overflow-y-auto drawer-scroll pr-1">
             {whatsapp.tickets.length === 0 && (
@@ -851,7 +852,13 @@ export function PhoneBar({
               return (
               <div
                 key={t.id}
-                onClick={() => selectWaTicket(t.id)}
+                onClick={() => {
+                  selectWaTicket(t.id);
+                  // The full conversation lives in the chat window
+                  // (v5.24): tapping a ticket opens it there. The
+                  // drawer's own quick reply stays as it was.
+                  void openWhatsAppChat(t.id);
+                }}
                 className={`p-3 rounded-2xl bg-[#1e293b]/80 border cursor-pointer transition ${
                   selected ? 'border-emerald-400/70 ring-1 ring-emerald-400/50' : 'border-[#334155]/70'
                 }`}
@@ -879,7 +886,7 @@ export function PhoneBar({
                     }}
                     className="text-[11px] font-bold text-emerald-300 hover:text-emerald-200 transition shrink-0"
                   >
-                    Open in Issabel ↗
+                    Open in Nero ↗
                   </button>
                 </div>
                 {selected && (

@@ -12,6 +12,8 @@ import {
   statusChangeJson,
   statusChanged,
   whatsAppReplyJson,
+  whatsAppStatusJson,
+  whatsAppThreadJson,
   workspaceUrl,
 } from '../shared/agent';
 import type {
@@ -22,6 +24,8 @@ import type {
   AgentState,
   AgentWhatsAppEvent,
   AgentWhatsAppResultEvent,
+  AgentWhatsAppStatusEvent,
+  AgentWhatsAppThreadEvent,
 } from '../shared/types';
 import { mainLog } from './logger';
 
@@ -68,6 +72,8 @@ export class AgentService {
     private emitPop: (p: AgentPopEvent) => void,
     private emitWhatsApp: (u: AgentWhatsAppEvent) => void,
     private emitWhatsAppResult: (r: AgentWhatsAppResultEvent) => void = () => {},
+    private emitWhatsAppThread: (r: AgentWhatsAppThreadEvent) => void = () => {},
+    private emitWhatsAppStatus: (r: AgentWhatsAppStatusEvent) => void = () => {},
   ) {}
 
   snapshot(): AgentState {
@@ -181,6 +187,21 @@ export class AgentService {
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 
+  // Chat window (v5.24): fetch one ticket's full thread, and run its
+  // status actions. Same socket, same relay pattern as the reply; the
+  // answers come back as whatsapp_thread_result / whatsapp_status_result.
+  whatsAppThread(ticketId: number): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppThreadJson(ticketId));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
+  whatsAppStatus(ticketId: number, status: string): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppStatusJson(ticketId, status));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
   // Opens the WhatsApp module inside Issabel (system browser). The URL is
   // built by the renderer from the middleware base (issabelModuleUrl);
   // only http(s) URLs are ever handed to the shell.
@@ -189,7 +210,7 @@ export class AgentService {
     const u = String(url || '').trim();
     if (!/^https?:\/\//i.test(u)) throw new Error('invalid url');
     await shell.openExternal(u);
-    mainLog('info', 'agent', 'opened the WhatsApp module in Issabel');
+    mainLog('info', 'agent', 'opened the WhatsApp module in Nero');
   }
 
   async openRecord(phone: string, uid: string, baseUrl?: string): Promise<void> {
@@ -276,6 +297,16 @@ export class AgentService {
     if (ev.kind === 'whatsapp_result') {
       // Phase 2: the outcome of a quick reply sent from the drawer.
       this.emitWhatsAppResult({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_thread') {
+      // Chat window: one ticket's full thread, fetched on open/refresh.
+      this.emitWhatsAppThread({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_status') {
+      // Chat window: the outcome of a status action.
+      this.emitWhatsAppStatus({ ...ev.result, receivedAt: Date.now() });
       return;
     }
     if (ev.kind !== 'state') return;

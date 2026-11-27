@@ -15,6 +15,9 @@ import {
   crmPopIsFresh,
   parseLoginResponse,
   parseAgentEvent,
+  whatsAppReplyJson,
+  whatsAppThreadJson,
+  whatsAppStatusJson,
 } from './agent.ts';
 
 const now = 1_700_000_000_000;
@@ -172,6 +175,78 @@ checks.push(
   ['pop is_new flag', newPop?.kind === 'pop' ? newPop.pop.isNew : null, true],
   ['pop new has no customer', newPop?.kind === 'pop' ? newPop.pop.customer : 'x', null],
   ['pop caller fallback', newPop?.kind === 'pop' ? newPop.pop.callerId : null, '777'],
+);
+
+// --- WhatsApp phonebar bridge (Phases 1-2 + chat window v5.24) ---
+checks.push(
+  ['wa reply json', whatsAppReplyJson(7, 'hi'), '{"event":"whatsapp_reply","ticket_id":7,"text":"hi"}'],
+  ['wa thread json', whatsAppThreadJson(7), '{"event":"whatsapp_thread","ticket_id":7}'],
+  ['wa status json', whatsAppStatusJson(7, 'pending'), '{"event":"whatsapp_status","ticket_id":7,"status":"pending"}'],
+);
+
+const waSnap = parseAgentEvent(
+  JSON.stringify({
+    event: 'whatsapp_update',
+    kind: 'snapshot',
+    unread_total: 3,
+    tickets: [
+      {
+        id: 5, contact_name: 'Mohamed Omar', phone: '201001234567', preview: 'hello',
+        unread_count: 2, status: 'open', waiting_seconds: 65,
+        channel_name: 'myet', team_name: 'Support',
+      },
+    ],
+  }),
+);
+checks.push(
+  ['wa snap kind', waSnap?.kind, 'whatsapp'],
+  ['wa snap ticket channel', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.channelName : null, 'myet'],
+  ['wa snap ticket team', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.teamName : null, 'Support'],
+);
+
+const waThread = parseAgentEvent(
+  JSON.stringify({
+    event: 'whatsapp_thread_result',
+    ticket_id: 5,
+    ok: true,
+    error: null,
+    thread: {
+      ticket: {
+        id: 5, status: 'open', contact_name: 'Mohamed Omar', contact_number: '201001234567',
+        assigned_username: 'momar', unread_count: 0, window_open: true,
+        provider_type: 'evolution_unofficial',
+        channel: { id: 2, name: 'myet', number: '2011222' },
+        team: { id: 1, name: 'Support' },
+        queue: null,
+      },
+      messages: [
+        {
+          id: 11, direction: 'in', sender_type: 'contact', type: 'text', body: 'hello',
+          status: 'received', error_detail: null, created_at: '2026-11-27 10:02:00', media: null,
+        },
+        {
+          id: 12, direction: 'in', sender_type: 'contact', type: 'image', body: '',
+          status: 'received', error_detail: null, created_at: '2026-11-27 10:03:00',
+          media: { mime: 'image/jpeg', filename: null, data_base64: 'AAAA', omitted: false },
+        },
+      ],
+    },
+  }),
+);
+checks.push(
+  ['wa thread kind', waThread?.kind, 'whatsapp_thread'],
+  ['wa thread channel', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.channel.name : null, 'myet'],
+  ['wa thread team', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.team?.name : null, 'Support'],
+  ['wa thread queue slot', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.queue : 'x', null],
+  ['wa thread msg count', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.messages.length : null, 2],
+  ['wa thread media mime', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.messages[1]?.media?.mime : null, 'image/jpeg'],
+  ['wa thread bad payload degrades', parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":42}')?.kind === 'whatsapp_thread' ? parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":42}').result.thread : 'x', null],
+);
+
+const waStatus = parseAgentEvent('{"event":"whatsapp_status_result","ticket_id":5,"ok":true,"status":"closed","error":null}');
+checks.push(
+  ['wa status kind', waStatus?.kind, 'whatsapp_status'],
+  ['wa status value', waStatus?.kind === 'whatsapp_status' ? waStatus.result.status : null, 'closed'],
 );
 
 let pass = 0;

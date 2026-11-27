@@ -62,6 +62,67 @@ export interface WhatsAppTicket {
   unreadCount: number;
   status: string;
   waitingSeconds: number;
+  // Chat window identity (v5.24): the line (channel account display
+  // name) the conversation came in on, and the team holding it. The
+  // module has no WhatsApp queues yet — when they land, the thread
+  // payload carries them and the identity badge gains its queue half.
+  channelName: string;
+  teamName: string;
+}
+
+// The chat window's full thread (v5.24): recent history for one ticket,
+// fetched over the agent socket through the middleware. Media bytes are
+// inlined as base64 by the WhatsApp service (the agent's PC cannot
+// reach the service directly); oversized items arrive as metadata
+// only (omitted) and the window points the agent at the web UI.
+export interface WhatsAppMedia {
+  mime: string | null;
+  filename: string | null;
+  dataBase64: string | null;
+  omitted: boolean;
+}
+
+export interface WhatsAppMessage {
+  id: number;
+  direction: string;
+  senderType: string;
+  type: string;
+  body: string;
+  status: string;
+  errorDetail: string | null;
+  createdAt: string;
+  media: WhatsAppMedia | null;
+}
+
+export interface WhatsAppThread {
+  ticket: {
+    id: number;
+    status: string;
+    contactName: string;
+    contactNumber: string;
+    assignedUsername: string | null;
+    unreadCount: number;
+    windowOpen: boolean;
+    providerType: string;
+    channel: { id: number; name: string; number: string };
+    team: { id: number; name: string } | null;
+    queue: { id: number; name: string } | null;
+  };
+  messages: WhatsAppMessage[];
+}
+
+export interface WhatsAppThreadResult {
+  ticketId: number;
+  ok: boolean;
+  thread: WhatsAppThread | null;
+  error: string | null;
+}
+
+export interface WhatsAppStatusResult {
+  ticketId: number;
+  ok: boolean;
+  status: string;
+  error: string | null;
 }
 
 export interface WhatsAppSnapshot {
@@ -86,6 +147,8 @@ export type AgentServerEvent =
   | { kind: 'pop'; pop: AgentPop }
   | { kind: 'whatsapp'; update: WhatsAppSnapshot }
   | { kind: 'whatsapp_result'; result: WhatsAppReplyResult }
+  | { kind: 'whatsapp_thread'; result: WhatsAppThreadResult }
+  | { kind: 'whatsapp_status'; result: WhatsAppStatusResult }
   | { kind: 'unknown'; event: string };
 
 export function parseWsUrl(
@@ -132,6 +195,17 @@ export function statusChangeJson(extension: string, status: string, reason: stri
 // only the ticket and the text.
 export function whatsAppReplyJson(ticketId: number, text: string): string {
   return JSON.stringify({ event: 'whatsapp_reply', ticket_id: ticketId, text });
+}
+
+// The chat window (v5.24) asks for one ticket's full thread, and for
+// its status actions. Same trust shape as the reply: the middleware
+// stamps the agent identity from the session.
+export function whatsAppThreadJson(ticketId: number): string {
+  return JSON.stringify({ event: 'whatsapp_thread', ticket_id: ticketId });
+}
+
+export function whatsAppStatusJson(ticketId: number, status: string): string {
+  return JSON.stringify({ event: 'whatsapp_status', ticket_id: ticketId, status });
 }
 
 // The echo of our own change must not restart the status timer.
@@ -258,6 +332,69 @@ export function parseLoginResponse(raw: unknown, apiUrl: string, wsPath = '/ws')
   };
 }
 
+// Defensive shaping of the chat-window thread payload: the service is
+// ours, but the socket is a trust boundary all the same — a malformed
+// thread degrades to null (the window shows its error state), never to
+// a crash.
+function parseThread(v: unknown): WhatsAppThread | null {
+  const t = asRecord(v);
+  if (!t) return null;
+  const tk = asRecord(t.ticket);
+  if (!tk) return null;
+  const id = Number(tk.id);
+  if (!Number.isFinite(id)) return null;
+  const ch = asRecord(tk.channel);
+  const tm = asRecord(tk.team);
+  const qu = asRecord(tk.queue);
+  const parseMessage = (mv: unknown): WhatsAppMessage | null => {
+    const m = asRecord(mv);
+    if (!m) return null;
+    const mid = Number(m.id);
+    if (!Number.isFinite(mid)) return null;
+    const md = asRecord(m.media);
+    return {
+      id: mid,
+      direction: String(m.direction ?? ''),
+      senderType: String(m.sender_type ?? ''),
+      type: String(m.type ?? ''),
+      body: String(m.body ?? ''),
+      status: String(m.status ?? ''),
+      errorDetail: m.error_detail != null ? String(m.error_detail) : null,
+      createdAt: String(m.created_at ?? ''),
+      media: md
+        ? {
+            mime: md.mime != null ? String(md.mime) : null,
+            filename: md.filename != null ? String(md.filename) : null,
+            dataBase64: md.data_base64 != null ? String(md.data_base64) : null,
+            omitted: md.omitted === true,
+          }
+        : null,
+    };
+  };
+  return {
+    ticket: {
+      id,
+      status: String(tk.status ?? ''),
+      contactName: String(tk.contact_name ?? ''),
+      contactNumber: String(tk.contact_number ?? ''),
+      assignedUsername: tk.assigned_username != null ? String(tk.assigned_username) : null,
+      unreadCount: Number(tk.unread_count) || 0,
+      windowOpen: tk.window_open === true,
+      providerType: String(tk.provider_type ?? ''),
+      channel: {
+        id: ch ? Number(ch.id) || 0 : 0,
+        name: ch ? String(ch.name ?? '') : '',
+        number: ch ? String(ch.number ?? '') : '',
+      },
+      team: tm ? { id: Number(tm.id) || 0, name: String(tm.name ?? '') } : null,
+      queue: qu ? { id: Number(qu.id) || 0, name: String(qu.name ?? '') } : null,
+    },
+    messages: Array.isArray(t.messages)
+      ? t.messages.map(parseMessage).filter((m): m is WhatsAppMessage => m !== null)
+      : [],
+  };
+}
+
 export function parseAgentEvent(raw: string): AgentServerEvent | null {
   let v: unknown;
   try {
@@ -326,6 +463,30 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
       },
     };
   }
+  if (event === 'whatsapp_thread_result') {
+    const ticketId = Number(r.ticket_id);
+    return {
+      kind: 'whatsapp_thread',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        thread: parseThread(r.thread),
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_status_result') {
+    const ticketId = Number(r.ticket_id);
+    return {
+      kind: 'whatsapp_status',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        status: String(r.status ?? ''),
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
   if (event === 'whatsapp_update') {
     const parseTicket = (v: unknown): WhatsAppTicket | null => {
       const t = asRecord(v);
@@ -340,6 +501,8 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
         unreadCount: Number(t.unread_count) || 0,
         status: String(t.status ?? ''),
         waitingSeconds: Number(t.waiting_seconds) || 0,
+        channelName: String(t.channel_name ?? ''),
+        teamName: String(t.team_name ?? ''),
       };
     };
     const tickets = Array.isArray(r.tickets)

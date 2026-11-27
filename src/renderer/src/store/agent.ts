@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { issabelModuleUrl, parseWsUrl } from '@shared/agent';
-import type { WhatsAppTicket } from '@shared/agent';
+import type { WhatsAppThread, WhatsAppTicket } from '@shared/agent';
 import type { AgentPopEvent, AgentProfile, AgentState } from '@shared/types';
 import { logger } from '../lib/logger';
 import { useSip } from './sip';
@@ -129,11 +129,34 @@ const BLANK_WHATSAPP: WhatsAppBarState = {
   replyStatus: {},
 };
 
+// Chat window state (v5.24). The chat window is a separate renderer
+// with its own copy of this store; the bar's copy simply never opens
+// the window surface. Threads are fetched per ticket over the agent
+// socket and cached here; opening a thread marks it read server-side.
+export interface WhatsAppChatState {
+  ticketId: number | null;
+  threads: Record<number, WhatsAppThread>;
+  loading: Record<number, boolean>;
+  errors: Record<number, string | null>;
+  statusBusy: Record<number, boolean>;
+  statusError: Record<number, string | null>;
+}
+
+const BLANK_CHAT: WhatsAppChatState = {
+  ticketId: null,
+  threads: {},
+  loading: {},
+  errors: {},
+  statusBusy: {},
+  statusError: {},
+};
+
 interface AgentStore {
   state: AgentState;
   profile: AgentProfile | null;
   pop: AgentPopEvent | null;
   whatsapp: WhatsAppBarState;
+  chat: WhatsAppChatState;
   apiUrl: string;
   serverIp: string;
   crmBaseUrl: string;
@@ -155,6 +178,9 @@ interface AgentStore {
   openRecord: (phone: string, uid: string) => Promise<void>;
   openWhatsApp: () => Promise<void>;
   sendWhatsAppReply: (ticketId: number, text: string) => Promise<void>;
+  openWhatsAppChat: (ticketId: number) => Promise<void>;
+  requestWhatsAppThread: (ticketId: number) => Promise<void>;
+  setWhatsAppStatus: (ticketId: number, status: 'open' | 'pending' | 'closed') => Promise<void>;
 }
 
 let bound = false;
@@ -166,6 +192,7 @@ export const useAgent = create<AgentStore>((set, get) => {
     profile: null,
     pop: null,
     whatsapp: BLANK_WHATSAPP,
+    chat: BLANK_CHAT,
     apiUrl: saved.apiUrl,
     serverIp: saved.serverIp,
     crmBaseUrl: saved.crmBaseUrl,
@@ -217,6 +244,54 @@ export const useAgent = create<AgentStore>((set, get) => {
           },
         }));
         logger.info('agent', `WhatsApp reply for ticket ${r.ticketId}: ${r.ok ? 'queued' : 'failed'}`);
+      });
+      window.api.onAgentWhatsAppThread((r) => {
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            loading: { ...cur.chat.loading, [r.ticketId]: false },
+            errors: {
+              ...cur.chat.errors,
+              [r.ticketId]: r.ok ? null : r.error || 'Could not load the conversation',
+            },
+            threads:
+              r.ok && r.thread ? { ...cur.chat.threads, [r.ticketId]: r.thread } : cur.chat.threads,
+          },
+        }));
+        if (!r.ok) logger.error('agent', `WhatsApp thread ${r.ticketId} failed: ${r.error || 'unknown'}`);
+      });
+      window.api.onAgentWhatsAppStatusResult((r) => {
+        set((cur) => {
+          const th = cur.chat.threads[r.ticketId];
+          return {
+            chat: {
+              ...cur.chat,
+              statusBusy: { ...cur.chat.statusBusy, [r.ticketId]: false },
+              statusError: {
+                ...cur.chat.statusError,
+                [r.ticketId]: r.ok ? null : r.error || 'Status change failed',
+              },
+              threads:
+                r.ok && th
+                  ? { ...cur.chat.threads, [r.ticketId]: { ...th, ticket: { ...th.ticket, status: r.status } } }
+                  : cur.chat.threads,
+            },
+            whatsapp: r.ok
+              ? {
+                  ...cur.whatsapp,
+                  tickets: cur.whatsapp.tickets.map((t) =>
+                    t.id === r.ticketId ? { ...t, status: r.status } : t,
+                  ),
+                }
+              : cur.whatsapp,
+          };
+        });
+        logger.info('agent', `WhatsApp status for ticket ${r.ticketId}: ${r.ok ? r.status : 'failed'}`);
+      });
+      window.api.onAgentWhatsAppFocus((f) => {
+        // The main process opened (or re-focused) the chat window on
+        // this ticket: select it and pull its thread.
+        void get().requestWhatsAppThread(f.ticketId);
       });
     },
 
@@ -287,6 +362,7 @@ export const useAgent = create<AgentStore>((set, get) => {
           profile: out.profile,
           pop: null,
           whatsapp: BLANK_WHATSAPP,
+          chat: BLANK_CHAT,
           apiUrl,
           serverIp: form.serverIp,
           username: form.username.trim(),
@@ -314,7 +390,7 @@ export const useAgent = create<AgentStore>((set, get) => {
       // the SIP registration of the agent goes with the agent session
       await useSip.getState().disconnect().catch(() => {});
       await window.api.agentLogout().catch(() => {});
-      set({ state: BLANK_STATE, profile: null, pop: null, whatsapp: BLANK_WHATSAPP });
+      set({ state: BLANK_STATE, profile: null, pop: null, whatsapp: BLANK_WHATSAPP, chat: BLANK_CHAT });
       logger.info('agent', 'logged out');
     },
 
@@ -333,19 +409,79 @@ export const useAgent = create<AgentStore>((set, get) => {
       set({ pop: null });
     },
 
-    // Opens the WhatsApp module inside Issabel in the system browser. The
+    // Opens the WhatsApp module inside Nero in the system browser. The
     // module lives on the same box the agent logged into: the URL is
     // derived from the middleware base (apiUrl), never stored separately.
     async openWhatsApp() {
       const url = issabelModuleUrl(get().apiUrl);
       if (!url) {
-        logger.error('agent', 'cannot derive the Issabel URL from the middleware URL');
+        logger.error('agent', 'cannot derive the Nero URL from the middleware URL');
         return;
       }
       try {
         await window.api.agentOpenWhatsApp(url);
       } catch (e) {
-        logger.error('agent', `opening WhatsApp in Issabel failed: ${e instanceof Error ? e.message : e}`);
+        logger.error('agent', `opening WhatsApp in Nero failed: ${e instanceof Error ? e.message : e}`);
+      }
+    },
+
+    // Opens (or re-focuses) the separate WhatsApp chat window on a
+    // ticket. The window itself pulls the thread once it is focused.
+    async openWhatsAppChat(ticketId) {
+      try {
+        await window.api.agentOpenWhatsAppChat(ticketId);
+      } catch (e) {
+        logger.error('agent', `opening the WhatsApp chat window failed: ${e instanceof Error ? e.message : e}`);
+      }
+    },
+
+    // Selects a ticket in the chat window and pulls its full thread.
+    // Opening marks it read server-side (assignee rule), so the badge
+    // snapshot that follows already shows it cleared.
+    async requestWhatsAppThread(ticketId) {
+      set((cur) => ({
+        chat: {
+          ...cur.chat,
+          ticketId,
+          loading: { ...cur.chat.loading, [ticketId]: true },
+          errors: { ...cur.chat.errors, [ticketId]: null },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppThread(ticketId);
+        // The thread itself arrives via onAgentWhatsAppThread.
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not load the conversation';
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            loading: { ...cur.chat.loading, [ticketId]: false },
+            errors: { ...cur.chat.errors, [ticketId]: msg },
+          },
+        }));
+      }
+    },
+
+    async setWhatsAppStatus(ticketId, status) {
+      set((cur) => ({
+        chat: {
+          ...cur.chat,
+          statusBusy: { ...cur.chat.statusBusy, [ticketId]: true },
+          statusError: { ...cur.chat.statusError, [ticketId]: null },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppStatus(ticketId, status);
+        // The outcome arrives via onAgentWhatsAppStatusResult.
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Status change failed';
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            statusBusy: { ...cur.chat.statusBusy, [ticketId]: false },
+            statusError: { ...cur.chat.statusError, [ticketId]: msg },
+          },
+        }));
       }
     },
 

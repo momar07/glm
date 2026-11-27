@@ -1,6 +1,6 @@
 // Shared types used across main, preload, and renderer processes.
 
-import type { AgentCustomer, AgentInteraction, WhatsAppTicket } from './agent';
+import type { AgentCustomer, AgentInteraction, WhatsAppThread, WhatsAppTicket } from './agent';
 import type { SipEngineEvent, SipHelperAnswer, SipHelperCommand } from './sipHelper';
 
 export type Presence =
@@ -200,6 +200,31 @@ export interface AgentWhatsAppResultEvent {
   receivedAt: number;
 }
 
+// The chat window's thread fetch outcome (v5.24), relayed by the
+// middleware after the WhatsApp service answered.
+export interface AgentWhatsAppThreadEvent {
+  ticketId: number;
+  ok: boolean;
+  thread: WhatsAppThread | null;
+  error: string | null;
+  receivedAt: number;
+}
+
+// The chat window's status action outcome (v5.24).
+export interface AgentWhatsAppStatusEvent {
+  ticketId: number;
+  ok: boolean;
+  status: string;
+  error: string | null;
+  receivedAt: number;
+}
+
+// Main -> chat window: show this ticket (the window was opened or
+// re-focused on a ticket from the bar's drawer).
+export interface AgentWhatsAppFocusEvent {
+  ticketId: number;
+}
+
 // IPC channel map — single source of truth for main<->preload<->renderer.
 export const IPC = {
   SETTINGS_GET: 'settings:get',
@@ -225,6 +250,14 @@ export const IPC = {
   AGENT_WHATSAPP: 'agent:whatsapp',
   AGENT_WHATSAPP_REPLY: 'agent:whatsapp-reply',
   AGENT_WHATSAPP_RESULT: 'agent:whatsapp-result',
+  AGENT_WHATSAPP_THREAD: 'agent:whatsapp-thread',
+  AGENT_WHATSAPP_THREAD_RESULT: 'agent:whatsapp-thread-result',
+  AGENT_WHATSAPP_STATUS: 'agent:whatsapp-status',
+  AGENT_WHATSAPP_STATUS_RESULT: 'agent:whatsapp-status-result',
+  AGENT_WHATSAPP_OPEN_CHAT: 'agent:whatsapp-open-chat',
+  AGENT_WHATSAPP_FOCUS: 'agent:whatsapp-focus',
+  AGENT_WHATSAPP_CLOSE_CHAT: 'agent:whatsapp-close-chat',
+  AGENT_WHATSAPP_MIN_CHAT: 'agent:whatsapp-min-chat',
   SIP_AVAILABLE: 'sip:available',
   SIP_COMMAND: 'sip:command',
   SIP_EVENT: 'sip:event',
@@ -260,10 +293,21 @@ export interface MainApi {
   agentOpenRecord(phone: string, uid: string, baseUrl?: string): Promise<void>;
   agentOpenWhatsApp(url: string): Promise<void>;
   agentWhatsAppReply(ticketId: number, text: string): Promise<void>;
+  // The WhatsApp chat window (v5.24): a separate BrowserWindow with the
+  // customer list and the full conversation. Thread/status ride the
+  // agent socket through the middleware, like the quick reply.
+  agentWhatsAppThread(ticketId: number): Promise<void>;
+  agentWhatsAppStatus(ticketId: number, status: string): Promise<void>;
+  agentOpenWhatsAppChat(ticketId: number): Promise<void>;
+  agentCloseWhatsAppChat(): Promise<void>;
+  agentMinimizeWhatsAppChat(): Promise<void>;
   onAgentState(cb: (s: AgentState) => void): () => void;
   onAgentPop(cb: (p: AgentPopEvent) => void): () => void;
   onAgentWhatsApp(cb: (u: AgentWhatsAppEvent) => void): () => void;
   onAgentWhatsAppResult(cb: (r: AgentWhatsAppResultEvent) => void): () => void;
+  onAgentWhatsAppThread(cb: (r: AgentWhatsAppThreadEvent) => void): () => void;
+  onAgentWhatsAppStatusResult(cb: (r: AgentWhatsAppStatusEvent) => void): () => void;
+  onAgentWhatsAppFocus(cb: (f: AgentWhatsAppFocusEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
   // The native engine (the sip-helper.exe of Windows). Available only when the
   // helper was built for this install.

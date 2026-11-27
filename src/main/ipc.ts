@@ -4,6 +4,7 @@ import type { AgentLoginRequest } from '../shared/types';
 import { settingsStore } from './store';
 import { fileLogger, mainLog } from './logger';
 import { AgentService } from './agent';
+import { closeWhatsAppChat, getWhatsAppWindow, openWhatsAppChat } from './whatsappWindow';
 import { registerSipIpc, shutdownSip } from './sipBridge';
 
 // ponytail: per-channel validators as plain guards. Promote to a zod schema if IPC surface grows.
@@ -123,11 +124,22 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     return r.canceled ? null : r.filePath ?? null;
   });
 
+  // Agent state and WhatsApp snapshots go to BOTH windows: the bar
+  // renders the badge/drawer, the chat window (when open) renders the
+  // same list and refreshes its open thread. Thread/status results are
+  // chat-window traffic; reply results go to both, since a reply can
+  // be sent from either surface.
+  const sendAll = (channel: string, payload: unknown): void => {
+    getMainWindow()?.webContents.send(channel, payload);
+    getWhatsAppWindow()?.webContents.send(channel, payload);
+  };
   agent = new AgentService(
-    (s) => getMainWindow()?.webContents.send(IPC.AGENT_STATE, s),
+    (s) => sendAll(IPC.AGENT_STATE, s),
     (p) => getMainWindow()?.webContents.send(IPC.AGENT_POP, p),
-    (u) => getMainWindow()?.webContents.send(IPC.AGENT_WHATSAPP, u),
-    (r) => getMainWindow()?.webContents.send(IPC.AGENT_WHATSAPP_RESULT, r),
+    (u) => sendAll(IPC.AGENT_WHATSAPP, u),
+    (r) => sendAll(IPC.AGENT_WHATSAPP_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_THREAD_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_STATUS_RESULT, r),
   );
   const svc = agent;
 
@@ -135,7 +147,10 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     if (!isLoginRequest(req)) throw new Error('invalid login request');
     return svc.login(req);
   });
-  ipcMain.handle(IPC.AGENT_LOGOUT, () => svc.logout());
+  ipcMain.handle(IPC.AGENT_LOGOUT, () => {
+    closeWhatsAppChat();
+    return svc.logout();
+  });
   ipcMain.handle(IPC.AGENT_STATUS, (_e, status: unknown, reason: unknown) => {
     if (status !== 'available' && status !== 'pause') throw new Error('invalid agent status');
     svc.setStatus(status, typeof reason === 'string' ? reason : '');
@@ -148,6 +163,29 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
     if (typeof text !== 'string' || !text.trim()) throw new Error('invalid reply text');
     svc.whatsAppReply(ticketId, text);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_THREAD, (_e, ticketId: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    svc.whatsAppThread(ticketId);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_STATUS, (_e, ticketId: unknown, status: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    if (status !== 'open' && status !== 'pending' && status !== 'closed') throw new Error('invalid status');
+    svc.whatsAppStatus(ticketId, status);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_OPEN_CHAT, (_e, ticketId: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    openWhatsAppChat(getMainWindow, ticketId);
+  });
+  // The chat window's own frame buttons act on the sender's window —
+  // never on the bar (APP_MINIMIZE targets the bar by design).
+  ipcMain.handle(IPC.AGENT_WHATSAPP_CLOSE_CHAT, (e) => {
+    const w = getWhatsAppWindow();
+    if (w && e.sender === w.webContents) w.close();
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_MIN_CHAT, (e) => {
+    const w = getWhatsAppWindow();
+    if (w && e.sender === w.webContents) w.minimize();
   });
   ipcMain.handle(IPC.AGENT_OPEN_RECORD, (_e, phone: unknown, uid: unknown, baseUrl: unknown) => {
     if (typeof phone !== 'string') throw new Error('invalid phone');
