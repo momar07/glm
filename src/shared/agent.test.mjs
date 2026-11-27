@@ -193,7 +193,7 @@ const waSnap = parseAgentEvent(
       {
         id: 5, contact_name: 'Mohamed Omar', phone: '201001234567', preview: 'hello',
         unread_count: 2, status: 'open', waiting_seconds: 65,
-        channel_name: 'myet', team_name: 'Support',
+        channel_name: 'myet', team_name: 'Support', queue_name: 'Support', queue_code: 'SUP',
       },
     ],
   }),
@@ -202,6 +202,8 @@ checks.push(
   ['wa snap kind', waSnap?.kind, 'whatsapp'],
   ['wa snap ticket channel', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.channelName : null, 'myet'],
   ['wa snap ticket team', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.teamName : null, 'Support'],
+  ['wa snap ticket queue name', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.queueName : null, 'Support'],
+  ['wa snap ticket queue code', waSnap?.kind === 'whatsapp' ? waSnap.update.tickets[0]?.queueCode : null, 'SUP'],
 );
 
 const waThread = parseAgentEvent(
@@ -217,7 +219,7 @@ const waThread = parseAgentEvent(
         provider_type: 'evolution_unofficial',
         channel: { id: 2, name: 'myet', number: '2011222' },
         team: { id: 1, name: 'Support' },
-        queue: null,
+        queue: { id: 1, name: 'Support', code: 'SUP' },
       },
       messages: [
         {
@@ -237,7 +239,9 @@ checks.push(
   ['wa thread kind', waThread?.kind, 'whatsapp_thread'],
   ['wa thread channel', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.channel.name : null, 'myet'],
   ['wa thread team', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.team?.name : null, 'Support'],
-  ['wa thread queue slot', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.queue : 'x', null],
+  ['wa thread queue name', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.queue?.name : null, 'Support'],
+  ['wa thread queue code', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.ticket.queue?.code : null, 'SUP'],
+  ['wa thread queue slot null degrades', parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":{"ticket":{"id":5,"queue":null},"messages":[]}}')?.kind === 'whatsapp_thread' ? parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":{"ticket":{"id":5,"queue":null},"messages":[]}}').result.thread?.ticket.queue : 'x', null],
   ['wa thread msg count', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.messages.length : null, 2],
   ['wa thread media mime', waThread?.kind === 'whatsapp_thread' ? waThread.result.thread?.messages[1]?.media?.mime : null, 'image/jpeg'],
   ['wa thread bad payload degrades', parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":42}')?.kind === 'whatsapp_thread' ? parseAgentEvent('{"event":"whatsapp_thread_result","ticket_id":5,"ok":true,"thread":42}').result.thread : 'x', null],

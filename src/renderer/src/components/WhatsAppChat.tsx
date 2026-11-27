@@ -66,10 +66,15 @@ function fmtWaiting(seconds: number): string {
 function IdentityCircle({
   channelName,
   lowerName,
+  lowerCodeText,
   size,
 }: {
   channelName: string;
   lowerName: string;
+  // The queue's own badge code from the module (v5.25). When present
+  // it is shown verbatim; otherwise the lower half is derived from the
+  // queue/team name as before.
+  lowerCodeText?: string;
   size: 'sm' | 'lg';
 }): React.ReactElement {
   const dims = size === 'lg' ? 'w-[46px] h-[46px]' : 'w-[38px] h-[38px]';
@@ -84,7 +89,7 @@ function IdentityCircle({
         {channelCode(channelName)}
       </span>
       <span className={size === 'lg' ? 'text-[8px] font-bold opacity-85' : 'text-[7px] font-bold opacity-85'}>
-        {lowerCode(lowerName)}
+        {lowerCodeText ? lowerCodeText.toUpperCase() : lowerCode(lowerName)}
       </span>
     </div>
   );
@@ -243,7 +248,8 @@ export function WhatsAppChatApp(): React.ReactElement {
   const statusError = ticketId != null ? chat.statusError[ticketId] : null;
   const channelName = thread?.ticket.channel.name ?? snapTicket?.channelName ?? '';
   const teamName = thread?.ticket.team?.name ?? snapTicket?.teamName ?? '';
-  const queueName = thread?.ticket.queue?.name ?? '';
+  const queueName = thread?.ticket.queue?.name ?? snapTicket?.queueName ?? '';
+  const queueCode = thread?.ticket.queue?.code ?? snapTicket?.queueCode ?? '';
   const lowerName = queueName || teamName;
   const contactName = thread?.ticket.contactName || snapTicket?.contactName || snapTicket?.phone || '';
   const contactNumber = thread?.ticket.contactNumber || snapTicket?.phone || '';
@@ -325,7 +331,7 @@ export function WhatsAppChatApp(): React.ReactElement {
                       </div>
                       <div className="text-[11px] text-slate-400 truncate mt-0.5">{t.preview || t.phone}</div>
                     </div>
-                    <IdentityCircle channelName={t.channelName} lowerName={t.teamName} size="sm" />
+                    <IdentityCircle channelName={t.channelName} lowerName={t.queueName || t.teamName} lowerCodeText={t.queueCode || undefined} size="sm" />
                   </div>
                 );
               })}
@@ -357,7 +363,7 @@ export function WhatsAppChatApp(): React.ReactElement {
                     </div>
                   </div>
                   <div className="ml-auto flex items-center gap-2.5 shrink-0">
-                    <IdentityCircle channelName={channelName} lowerName={lowerName} size="lg" />
+                    <IdentityCircle channelName={channelName} lowerName={lowerName} lowerCodeText={queueCode || undefined} size="lg" />
                     <select
                       value={status}
                       disabled={statusBusy}

@@ -62,12 +62,14 @@ export interface WhatsAppTicket {
   unreadCount: number;
   status: string;
   waitingSeconds: number;
-  // Chat window identity (v5.24): the line (channel account display
-  // name) the conversation came in on, and the team holding it. The
-  // module has no WhatsApp queues yet — when they land, the thread
-  // payload carries them and the identity badge gains its queue half.
+  // Chat window identity: the line (channel account display name) the
+  // conversation came in on, and its queue (v5.25 — queueName/queueCode
+  // power the identity badge's lower half; teamName is the fallback
+  // for tickets that predate queue stamping).
   channelName: string;
   teamName: string;
+  queueName: string;
+  queueCode: string;
 }
 
 // The chat window's full thread (v5.24): recent history for one ticket,
@@ -106,7 +108,7 @@ export interface WhatsAppThread {
     providerType: string;
     channel: { id: number; name: string; number: string };
     team: { id: number; name: string } | null;
-    queue: { id: number; name: string } | null;
+    queue: { id: number; name: string; code: string } | null;
   };
   messages: WhatsAppMessage[];
 }
@@ -387,7 +389,7 @@ function parseThread(v: unknown): WhatsAppThread | null {
         number: ch ? String(ch.number ?? '') : '',
       },
       team: tm ? { id: Number(tm.id) || 0, name: String(tm.name ?? '') } : null,
-      queue: qu ? { id: Number(qu.id) || 0, name: String(qu.name ?? '') } : null,
+      queue: qu ? { id: Number(qu.id) || 0, name: String(qu.name ?? ''), code: String(qu.code ?? '') } : null,
     },
     messages: Array.isArray(t.messages)
       ? t.messages.map(parseMessage).filter((m): m is WhatsAppMessage => m !== null)
@@ -503,6 +505,8 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
         waitingSeconds: Number(t.waiting_seconds) || 0,
         channelName: String(t.channel_name ?? ''),
         teamName: String(t.team_name ?? ''),
+        queueName: String(t.queue_name ?? ''),
+        queueCode: String(t.queue_code ?? ''),
       };
     };
     const tickets = Array.isArray(r.tickets)
