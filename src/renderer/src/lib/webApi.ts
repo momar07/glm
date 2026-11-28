@@ -114,6 +114,7 @@ export function createWebApi(): MainApi {
     agentWhatsAppMedia: async () => {},
     agentWhatsAppTransferOptions: async () => {},
     agentWhatsAppTransfer: async () => {},
+    agentWhatsAppUnassign: async () => {},
     agentOpenWhatsAppChat: async () => {},
     agentCloseWhatsAppChat: async () => {},
     agentMinimizeWhatsAppChat: async () => {},
@@ -126,6 +127,7 @@ export function createWebApi(): MainApi {
     onAgentWhatsAppMediaResult: () => () => {},
     onAgentWhatsAppTransferOptions: () => () => {},
     onAgentWhatsAppTransferResult: () => () => {},
+    onAgentWhatsAppUnassignResult: () => () => {},
     onAgentWhatsAppFocus: () => () => {},
     setTrustedHost: async () => {},
     // The native engine is a Windows helper of the desktop app.

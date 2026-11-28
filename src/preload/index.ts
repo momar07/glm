@@ -33,6 +33,7 @@ const api: MainApi = {
     ipcRenderer.invoke(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS, ticketId),
   agentWhatsAppTransfer: (ticketId, target) =>
     ipcRenderer.invoke(IPC.AGENT_WHATSAPP_TRANSFER, ticketId, target),
+  agentWhatsAppUnassign: (ticketId) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_UNASSIGN, ticketId),
   agentOpenWhatsAppChat: (ticketId) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_OPEN_CHAT, ticketId),
   agentCloseWhatsAppChat: () => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_CLOSE_CHAT),
   agentMinimizeWhatsAppChat: () => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_MIN_CHAT),
@@ -45,6 +46,7 @@ const api: MainApi = {
   onAgentWhatsAppMediaResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_MEDIA_RESULT, cb),
   onAgentWhatsAppTransferOptions: (cb) => subscribe(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT, cb),
   onAgentWhatsAppTransferResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_TRANSFER_RESULT, cb),
+  onAgentWhatsAppUnassignResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_UNASSIGN_RESULT, cb),
   onAgentWhatsAppFocus: (cb) => subscribe(IPC.AGENT_WHATSAPP_FOCUS, cb),
   setTrustedHost: (host, trust) => ipcRenderer.invoke(IPC.TLS_TRUST_HOST, host, trust),
   sipAvailable: () => ipcRenderer.invoke(IPC.SIP_AVAILABLE),

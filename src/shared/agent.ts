@@ -111,6 +111,8 @@ export interface WhatsAppThread {
     // works on this channel at all (unofficial only for now).
     mediaMaxMb: number;
     mediaSupported: boolean;
+    // v5.32: the module allows this viewer to unassign (supervisors).
+    canUnassign: boolean;
     channel: { id: number; name: string; number: string };
     team: { id: number; name: string } | null;
     queue: { id: number; name: string; code: string } | null;
@@ -144,6 +146,15 @@ export interface WhatsAppMediaResult {
 export interface WhatsAppTransferResult {
   ticketId: number;
   ok: boolean;
+  error: string | null;
+}
+
+export interface WhatsAppUnassignResult {
+  ticketId: number;
+  ok: boolean;
+  // Where the ticket landed: a new assignee, or null when it went
+  // back to the queue pool.
+  assignedUserId: number | null;
   error: string | null;
 }
 
@@ -187,6 +198,7 @@ export type AgentServerEvent =
   | { kind: 'whatsapp_status'; result: WhatsAppStatusResult }
   | { kind: 'whatsapp_media'; result: WhatsAppMediaResult }
   | { kind: 'whatsapp_transfer'; result: WhatsAppTransferResult }
+  | { kind: 'whatsapp_unassign'; result: WhatsAppUnassignResult }
   | { kind: 'whatsapp_transfer_options'; result: WhatsAppTransferOptionsResult }
   | { kind: 'unknown'; event: string };
 
@@ -279,6 +291,10 @@ export function whatsAppTransferJson(
     agent_id: target.agentId ?? null,
     team_id: target.teamId ?? null,
   });
+}
+
+export function whatsAppUnassignJson(ticketId: number): string {
+  return JSON.stringify({ event: 'whatsapp_unassign', ticket_id: ticketId });
 }
 
 // The echo of our own change must not restart the status timer.
@@ -456,6 +472,7 @@ function parseThread(v: unknown): WhatsAppThread | null {
       providerType: String(tk.provider_type ?? ''),
       mediaMaxMb: Number(tk.media_max_mb) || 10,
       mediaSupported: tk.media_supported === true,
+      canUnassign: tk.can_unassign === true,
       channel: {
         id: ch ? Number(ch.id) || 0 : 0,
         name: ch ? String(ch.name ?? '') : '',
@@ -580,6 +597,19 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
       result: {
         ticketId: Number.isFinite(ticketId) ? ticketId : 0,
         ok: r.ok === true,
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_unassign_result') {
+    const ticketId = Number(r.ticket_id);
+    const assigned = Number(r.assigned_user_id);
+    return {
+      kind: 'whatsapp_unassign',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        assignedUserId: Number.isFinite(assigned) && assigned > 0 ? assigned : null,
         error: r.error != null ? String(r.error) : null,
       },
     };

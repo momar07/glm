@@ -17,6 +17,7 @@ import {
   whatsAppThreadJson,
   whatsAppTransferJson,
   whatsAppTransferOptionsJson,
+  whatsAppUnassignJson,
   workspaceUrl,
 } from '../shared/agent';
 import type {
@@ -32,6 +33,7 @@ import type {
   AgentWhatsAppThreadEvent,
   AgentWhatsAppTransferEvent,
   AgentWhatsAppTransferOptionsEvent,
+  AgentWhatsAppUnassignEvent,
 } from '../shared/types';
 import { mainLog } from './logger';
 
@@ -83,6 +85,7 @@ export class AgentService {
     private emitWhatsAppMedia: (r: AgentWhatsAppMediaEvent) => void = () => {},
     private emitWhatsAppTransferOptions: (r: AgentWhatsAppTransferOptionsEvent) => void = () => {},
     private emitWhatsAppTransfer: (r: AgentWhatsAppTransferEvent) => void = () => {},
+    private emitWhatsAppUnassign: (r: AgentWhatsAppUnassignEvent) => void = () => {},
   ) {}
 
   snapshot(): AgentState {
@@ -236,6 +239,14 @@ export class AgentService {
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 
+  // Chat window unassign (v5.32): supervisors only — the module
+  // enforces it; the answer comes back as whatsapp_unassign_result.
+  whatsAppUnassign(ticketId: number): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppUnassignJson(ticketId));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
   // Opens the WhatsApp module inside Issabel (system browser). The URL is
   // built by the renderer from the middleware base (issabelModuleUrl);
   // only http(s) URLs are ever handed to the shell.
@@ -356,6 +367,11 @@ export class AgentService {
     if (ev.kind === 'whatsapp_transfer') {
       // Chat window: the outcome of a transfer.
       this.emitWhatsAppTransfer({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_unassign') {
+      // Chat window: the outcome of an unassign.
+      this.emitWhatsAppUnassign({ ...ev.result, receivedAt: Date.now() });
       return;
     }
     if (ev.kind !== 'state') return;

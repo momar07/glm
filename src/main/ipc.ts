@@ -149,6 +149,7 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_MEDIA_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_TRANSFER_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_UNASSIGN_RESULT, r),
   );
   const svc = agent;
 
@@ -209,6 +210,10 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     const teamId = t && typeof t.teamId === 'number' && Number.isFinite(t.teamId) ? t.teamId : undefined;
     if ((agentId == null) === (teamId == null)) throw new Error('invalid transfer target');
     svc.whatsAppTransfer(ticketId, { agentId, teamId });
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_UNASSIGN, (_e, ticketId: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    svc.whatsAppUnassign(ticketId);
   });
   ipcMain.handle(IPC.AGENT_WHATSAPP_OPEN_CHAT, (_e, ticketId: unknown) => {
     if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');

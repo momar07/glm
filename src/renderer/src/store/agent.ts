@@ -147,6 +147,10 @@ export interface WhatsAppChatState {
   transferBusy: Record<number, boolean>;
   transferError: Record<number, string | null>;
   transferDoneAt: Record<number, number>;
+  // v5.32: unassign outcome per ticket (supervisors only).
+  unassignBusy: Record<number, boolean>;
+  unassignError: Record<number, string | null>;
+  unassignDoneAt: Record<number, number>;
 }
 
 const BLANK_CHAT: WhatsAppChatState = {
@@ -161,7 +165,21 @@ const BLANK_CHAT: WhatsAppChatState = {
   transferBusy: {},
   transferError: {},
   transferDoneAt: {},
+  unassignBusy: {},
+  unassignError: {},
+  unassignDoneAt: {},
 };
+
+// v5.32: when the open conversation ends — closed, unassigned, or
+// transferred away — the pane zeroes out (no selection, no cached
+// thread) instead of lingering on a conversation that is no longer
+// the agent's. The list already settles itself from the snapshot.
+function dropOpenThread(chat: WhatsAppChatState, ticketId: number): WhatsAppChatState {
+  if (chat.ticketId !== ticketId) return chat;
+  const threads = { ...chat.threads };
+  delete threads[ticketId];
+  return { ...chat, ticketId: null, threads };
+}
 
 interface AgentStore {
   state: AgentState;
@@ -199,6 +217,8 @@ interface AgentStore {
   ) => Promise<void>;
   requestWhatsAppTransferOptions: (ticketId: number) => Promise<void>;
   transferWhatsApp: (ticketId: number, target: { agentId?: number; teamId?: number }) => Promise<void>;
+  unassignWhatsApp: (ticketId: number) => Promise<void>;
+  clearWhatsAppSelection: () => void;
 }
 
 let bound = false;
@@ -281,19 +301,21 @@ export const useAgent = create<AgentStore>((set, get) => {
       window.api.onAgentWhatsAppStatusResult((r) => {
         set((cur) => {
           const th = cur.chat.threads[r.ticketId];
-          return {
-            chat: {
-              ...cur.chat,
-              statusBusy: { ...cur.chat.statusBusy, [r.ticketId]: false },
-              statusError: {
-                ...cur.chat.statusError,
-                [r.ticketId]: r.ok ? null : r.error || 'Status change failed',
-              },
-              threads:
-                r.ok && th
-                  ? { ...cur.chat.threads, [r.ticketId]: { ...th, ticket: { ...th.ticket, status: r.status } } }
-                  : cur.chat.threads,
+          const base: WhatsAppChatState = {
+            ...cur.chat,
+            statusBusy: { ...cur.chat.statusBusy, [r.ticketId]: false },
+            statusError: {
+              ...cur.chat.statusError,
+              [r.ticketId]: r.ok ? null : r.error || 'Status change failed',
             },
+            threads:
+              r.ok && th
+                ? { ...cur.chat.threads, [r.ticketId]: { ...th, ticket: { ...th.ticket, status: r.status } } }
+                : cur.chat.threads,
+          };
+          return {
+            // Closing the open conversation zeroes the pane (v5.32).
+            chat: r.ok && r.status === 'closed' ? dropOpenThread(base, r.ticketId) : base,
             whatsapp: r.ok
               ? {
                   ...cur.whatsapp,
@@ -346,8 +368,8 @@ export const useAgent = create<AgentStore>((set, get) => {
         if (!r.ok) logger.error('agent', `WhatsApp transfer options ${r.ticketId} failed: ${r.error || 'unknown'}`);
       });
       window.api.onAgentWhatsAppTransferResult((r) => {
-        set((cur) => ({
-          chat: {
+        set((cur) => {
+          const base: WhatsAppChatState = {
             ...cur.chat,
             transferBusy: { ...cur.chat.transferBusy, [r.ticketId]: false },
             transferError: {
@@ -357,15 +379,30 @@ export const useAgent = create<AgentStore>((set, get) => {
             transferDoneAt: r.ok
               ? { ...cur.chat.transferDoneAt, [r.ticketId]: r.receivedAt }
               : cur.chat.transferDoneAt,
-          },
-        }));
+          };
+          // A transferred conversation leaves this agent's hands:
+          // zero the pane (v5.32). If the queue hands it straight
+          // back, it reappears in the list from the snapshot.
+          return { chat: r.ok ? dropOpenThread(base, r.ticketId) : base };
+        });
         logger.info('agent', `WhatsApp transfer for ticket ${r.ticketId}: ${r.ok ? 'done' : 'failed'}`);
-        // A transferred ticket usually leaves this agent (or comes
-        // back via the queue): refresh the open thread if it is still
-        // ours; the snapshot settles the list either way.
-        if (r.ok && get().chat.ticketId === r.ticketId) {
-          void get().requestWhatsAppThread(r.ticketId);
-        }
+      });
+      window.api.onAgentWhatsAppUnassignResult((r) => {
+        set((cur) => {
+          const base: WhatsAppChatState = {
+            ...cur.chat,
+            unassignBusy: { ...cur.chat.unassignBusy, [r.ticketId]: false },
+            unassignError: {
+              ...cur.chat.unassignError,
+              [r.ticketId]: r.ok ? null : r.error || 'Unassign failed',
+            },
+            unassignDoneAt: r.ok
+              ? { ...cur.chat.unassignDoneAt, [r.ticketId]: r.receivedAt }
+              : cur.chat.unassignDoneAt,
+          };
+          return { chat: r.ok ? dropOpenThread(base, r.ticketId) : base };
+        });
+        logger.info('agent', `WhatsApp unassign for ticket ${r.ticketId}: ${r.ok ? 'done' : 'failed'}`);
       });
       window.api.onAgentWhatsAppFocus((f) => {
         // The main process opened (or re-focused) the chat window on
@@ -517,6 +554,12 @@ export const useAgent = create<AgentStore>((set, get) => {
     // Selects a ticket in the chat window and pulls its full thread.
     // Opening marks it read server-side (assignee rule), so the badge
     // snapshot that follows already shows it cleared.
+    clearWhatsAppSelection() {
+      set((cur) => ({
+        chat: cur.chat.ticketId != null ? dropOpenThread(cur.chat, cur.chat.ticketId) : cur.chat,
+      }));
+    },
+
     async requestWhatsAppThread(ticketId) {
       set((cur) => ({
         chat: {
@@ -602,6 +645,29 @@ export const useAgent = create<AgentStore>((set, get) => {
         const msg = e instanceof Error ? e.message : 'Could not load transfer targets';
         set((cur) => ({
           chat: { ...cur.chat, transferError: { ...cur.chat.transferError, [ticketId]: msg } },
+        }));
+      }
+    },
+
+    async unassignWhatsApp(ticketId) {
+      set((cur) => ({
+        chat: {
+          ...cur.chat,
+          unassignBusy: { ...cur.chat.unassignBusy, [ticketId]: true },
+          unassignError: { ...cur.chat.unassignError, [ticketId]: null },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppUnassign(ticketId);
+        // The outcome arrives via onAgentWhatsAppUnassignResult.
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Unassign failed';
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            unassignBusy: { ...cur.chat.unassignBusy, [ticketId]: false },
+            unassignError: { ...cur.chat.unassignError, [ticketId]: msg },
+          },
         }));
       }
     },

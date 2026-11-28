@@ -183,6 +183,8 @@ export function WhatsAppChatApp(): React.ReactElement {
   const sendWhatsAppMedia = useAgent((s) => s.sendWhatsAppMedia);
   const requestWhatsAppTransferOptions = useAgent((s) => s.requestWhatsAppTransferOptions);
   const transferWhatsApp = useAgent((s) => s.transferWhatsApp);
+  const unassignWhatsApp = useAgent((s) => s.unassignWhatsApp);
+  const clearWhatsAppSelection = useAgent((s) => s.clearWhatsAppSelection);
 
   const [query, setQuery] = useState('');
   const [text, setText] = useState('');
@@ -191,6 +193,8 @@ export function WhatsAppChatApp(): React.ReactElement {
   const threadRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const sigRef = useRef<string>('');
+  const prevTicketRef = useRef<number | null>(null);
+  const suppressTopRef = useRef(0);
 
   useEffect(() => {
     init();
@@ -222,6 +226,8 @@ export function WhatsAppChatApp(): React.ReactElement {
   const transferBusy = ticketId != null ? !!chat.transferBusy[ticketId] : false;
   const transferError = ticketId != null ? chat.transferError[ticketId] : null;
   const transferDoneAt = ticketId != null ? chat.transferDoneAt[ticketId] : undefined;
+  const unassignBusy = ticketId != null ? !!chat.unassignBusy[ticketId] : false;
+  const unassignError = ticketId != null ? chat.unassignError[ticketId] : null;
 
   // The composer text rides as the media caption; clear it once the
   // module accepted the attachment.
@@ -234,13 +240,36 @@ export function WhatsAppChatApp(): React.ReactElement {
     if (transferDoneAt) setTransferOpen(false);
   }, [transferDoneAt]);
 
+  // v5.32: after the pane is zeroed by a close / unassign / transfer,
+  // do not immediately auto-select the next conversation — the agent
+  // picks one, or a genuinely new ticket (higher id) arrives.
+  useEffect(() => {
+    if (ticketId == null && prevTicketRef.current != null) {
+      suppressTopRef.current = whatsapp.tickets.reduce((m, t) => Math.max(m, t.id), 0);
+    }
+    if (ticketId != null) suppressTopRef.current = 0;
+    prevTicketRef.current = ticketId;
+  }, [ticketId, whatsapp.tickets]);
+
   // Opened without a specific ticket (the bar's WhatsApp button):
   // land on the most recent conversation as soon as the list is in.
   useEffect(() => {
     if (ticketId == null && whatsapp.tickets.length > 0) {
-      void requestWhatsAppThread(whatsapp.tickets[0].id);
+      const top = whatsapp.tickets[0];
+      if (suppressTopRef.current && top.id <= suppressTopRef.current) return;
+      void requestWhatsAppThread(top.id);
     }
   }, [ticketId, whatsapp.tickets, requestWhatsAppThread]);
+
+  // Backstop (v5.32): the open ticket vanished from a NON-full list
+  // — it was closed or taken elsewhere — so zero the pane too. A
+  // full list (10, the module's snapshot cap) is ambiguous: the
+  // ticket may only have been pushed out by newer ones; leave it.
+  useEffect(() => {
+    if (ticketId == null || !whatsapp.seen || loading || snapTicket) return;
+    if (whatsapp.tickets.length >= 10) return;
+    clearWhatsAppSelection();
+  }, [ticketId, whatsapp.seen, whatsapp.tickets, snapTicket, loading, clearWhatsAppSelection]);
 
   // Live refresh: when the snapshot says the open conversation moved
   // (new inbound, new preview, status change elsewhere), pull the
@@ -324,6 +353,11 @@ export function WhatsAppChatApp(): React.ReactElement {
     const next = !transferOpen;
     setTransferOpen(next);
     if (next) void requestWhatsAppTransferOptions(ticketId);
+  };
+
+  const doUnassign = (): void => {
+    if (ticketId == null) return;
+    void unassignWhatsApp(ticketId);
   };
 
   return (
@@ -471,7 +505,18 @@ export function WhatsAppChatApp(): React.ReactElement {
                   >
                     Transfer ⇄
                   </button>
+                  {thread?.ticket.canUnassign && thread?.ticket.assignedUsername && status !== 'closed' && (
+                    <button
+                      onClick={doUnassign}
+                      disabled={unassignBusy}
+                      className="px-3 py-1.5 rounded-full bg-[#1e293b] border border-amber-500/60 text-amber-300 text-[11px] font-bold hover:bg-slate-700 transition disabled:opacity-40"
+                      title="Return this conversation to its queue (supervisors only)"
+                    >
+                      {unassignBusy ? 'Unassigning…' : 'Unassign'}
+                    </button>
+                  )}
                   {statusError && <span className="text-[11px] text-red-300">{statusError}</span>}
+                  {unassignError && <span className="text-[11px] text-red-300">{unassignError}</span>}
                   {thread?.ticket.assignedUsername && (
                     <span className="text-[10px] text-slate-500 ml-auto">
                       Assigned: {thread.ticket.assignedUsername}

@@ -241,6 +241,15 @@ export interface AgentWhatsAppTransferEvent {
   receivedAt: number;
 }
 
+// The chat window's unassign outcome (v5.32, supervisors only).
+export interface AgentWhatsAppUnassignEvent {
+  ticketId: number;
+  ok: boolean;
+  assignedUserId: number | null;
+  error: string | null;
+  receivedAt: number;
+}
+
 // The chat window's transfer menu data (Phase 3, v5.30): the module's
 // agents and queues, with the ticket's current owner marked.
 export interface AgentWhatsAppTransferOptionsEvent {
@@ -292,6 +301,8 @@ export const IPC = {
   AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT: 'agent:whatsapp-transfer-options-result',
   AGENT_WHATSAPP_TRANSFER: 'agent:whatsapp-transfer',
   AGENT_WHATSAPP_TRANSFER_RESULT: 'agent:whatsapp-transfer-result',
+  AGENT_WHATSAPP_UNASSIGN: 'agent:whatsapp-unassign',
+  AGENT_WHATSAPP_UNASSIGN_RESULT: 'agent:whatsapp-unassign-result',
   AGENT_WHATSAPP_OPEN_CHAT: 'agent:whatsapp-open-chat',
   AGENT_WHATSAPP_FOCUS: 'agent:whatsapp-focus',
   AGENT_WHATSAPP_CLOSE_CHAT: 'agent:whatsapp-close-chat',
@@ -343,6 +354,7 @@ export interface MainApi {
   ): Promise<void>;
   agentWhatsAppTransferOptions(ticketId: number): Promise<void>;
   agentWhatsAppTransfer(ticketId: number, target: { agentId?: number; teamId?: number }): Promise<void>;
+  agentWhatsAppUnassign(ticketId: number): Promise<void>;
   agentOpenWhatsAppChat(ticketId: number): Promise<void>;
   agentCloseWhatsAppChat(): Promise<void>;
   agentMinimizeWhatsAppChat(): Promise<void>;
@@ -355,6 +367,7 @@ export interface MainApi {
   onAgentWhatsAppMediaResult(cb: (r: AgentWhatsAppMediaEvent) => void): () => void;
   onAgentWhatsAppTransferOptions(cb: (r: AgentWhatsAppTransferOptionsEvent) => void): () => void;
   onAgentWhatsAppTransferResult(cb: (r: AgentWhatsAppTransferEvent) => void): () => void;
+  onAgentWhatsAppUnassignResult(cb: (r: AgentWhatsAppUnassignEvent) => void): () => void;
   onAgentWhatsAppFocus(cb: (f: AgentWhatsAppFocusEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
   // The native engine (the sip-helper.exe of Windows). Available only when the
