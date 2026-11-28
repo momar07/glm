@@ -106,6 +106,11 @@ export interface WhatsAppThread {
     unreadCount: number;
     windowOpen: boolean;
     providerType: string;
+    // Phase 3 (v5.30): the composer's media allowance on this ticket —
+    // the D6 cap from the module's Settings, and whether media sending
+    // works on this channel at all (unofficial only for now).
+    mediaMaxMb: number;
+    mediaSupported: boolean;
     channel: { id: number; name: string; number: string };
     team: { id: number; name: string } | null;
     queue: { id: number; name: string; code: string } | null;
@@ -124,6 +129,35 @@ export interface WhatsAppStatusResult {
   ticketId: number;
   ok: boolean;
   status: string;
+  error: string | null;
+}
+
+// Phase 3 (v5.30): media sending + transfer from the chat window. The
+// outcomes mirror the reply/status relays; the transfer options carry
+// the module's agents and queues (with badge codes).
+export interface WhatsAppMediaResult {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+}
+
+export interface WhatsAppTransferResult {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+}
+
+export interface WhatsAppTransferOptions {
+  agents: { uid: number; uname: string }[];
+  teams: { id: number; name: string; code: string }[];
+  currentAgent: number | null;
+  currentTeam: number | null;
+}
+
+export interface WhatsAppTransferOptionsResult {
+  ticketId: number;
+  ok: boolean;
+  options: WhatsAppTransferOptions | null;
   error: string | null;
 }
 
@@ -151,6 +185,9 @@ export type AgentServerEvent =
   | { kind: 'whatsapp_result'; result: WhatsAppReplyResult }
   | { kind: 'whatsapp_thread'; result: WhatsAppThreadResult }
   | { kind: 'whatsapp_status'; result: WhatsAppStatusResult }
+  | { kind: 'whatsapp_media'; result: WhatsAppMediaResult }
+  | { kind: 'whatsapp_transfer'; result: WhatsAppTransferResult }
+  | { kind: 'whatsapp_transfer_options'; result: WhatsAppTransferOptionsResult }
   | { kind: 'unknown'; event: string };
 
 export function parseWsUrl(
@@ -208,6 +245,40 @@ export function whatsAppThreadJson(ticketId: number): string {
 
 export function whatsAppStatusJson(ticketId: number, status: string): string {
   return JSON.stringify({ event: 'whatsapp_status', ticket_id: ticketId, status });
+}
+
+// Phase 3 (v5.30): a media send from the chat window — the file rides
+// as base64 over the same socket (the service enforces the D6 cap and
+// the unofficial-only rule), and the transfer pair: the options fetch
+// that fills the menu, and the transfer itself (exactly one target).
+export function whatsAppMediaJson(
+  ticketId: number,
+  file: { filename: string; mime: string; caption?: string; dataBase64: string },
+): string {
+  return JSON.stringify({
+    event: 'whatsapp_media',
+    ticket_id: ticketId,
+    filename: file.filename,
+    mime: file.mime,
+    caption: file.caption || '',
+    data_base64: file.dataBase64,
+  });
+}
+
+export function whatsAppTransferOptionsJson(ticketId: number): string {
+  return JSON.stringify({ event: 'whatsapp_transfer_options', ticket_id: ticketId });
+}
+
+export function whatsAppTransferJson(
+  ticketId: number,
+  target: { agentId?: number; teamId?: number },
+): string {
+  return JSON.stringify({
+    event: 'whatsapp_transfer',
+    ticket_id: ticketId,
+    agent_id: target.agentId ?? null,
+    team_id: target.teamId ?? null,
+  });
 }
 
 // The echo of our own change must not restart the status timer.
@@ -383,6 +454,8 @@ function parseThread(v: unknown): WhatsAppThread | null {
       unreadCount: Number(tk.unread_count) || 0,
       windowOpen: tk.window_open === true,
       providerType: String(tk.provider_type ?? ''),
+      mediaMaxMb: Number(tk.media_max_mb) || 10,
+      mediaSupported: tk.media_supported === true,
       channel: {
         id: ch ? Number(ch.id) || 0 : 0,
         name: ch ? String(ch.name ?? '') : '',
@@ -485,6 +558,65 @@ export function parseAgentEvent(raw: string): AgentServerEvent | null {
         ticketId: Number.isFinite(ticketId) ? ticketId : 0,
         ok: r.ok === true,
         status: String(r.status ?? ''),
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_media_result') {
+    const ticketId = Number(r.ticket_id);
+    return {
+      kind: 'whatsapp_media',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_transfer_result') {
+    const ticketId = Number(r.ticket_id);
+    return {
+      kind: 'whatsapp_transfer',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        error: r.error != null ? String(r.error) : null,
+      },
+    };
+  }
+  if (event === 'whatsapp_transfer_options_result') {
+    const ticketId = Number(r.ticket_id);
+    const o = asRecord(r.options);
+    const options: WhatsAppTransferOptions | null = o
+      ? {
+          agents: Array.isArray(o.agents)
+            ? o.agents
+                .map((a) => {
+                  const ar = asRecord(a);
+                  return ar ? { uid: Number(ar.uid) || 0, uname: String(ar.uname ?? '') } : null;
+                })
+                .filter((a): a is { uid: number; uname: string } => a !== null && a.uid > 0)
+            : [],
+          teams: Array.isArray(o.teams)
+            ? o.teams
+                .map((t) => {
+                  const tr = asRecord(t);
+                  return tr
+                    ? { id: Number(tr.id) || 0, name: String(tr.name ?? ''), code: String(tr.code ?? '') }
+                    : null;
+                })
+                .filter((t): t is { id: number; name: string; code: string } => t !== null && t.id > 0)
+            : [],
+          currentAgent: o.current_agent != null ? Number(o.current_agent) : null,
+          currentTeam: o.current_team != null ? Number(o.current_team) : null,
+        }
+      : null;
+    return {
+      kind: 'whatsapp_transfer_options',
+      result: {
+        ticketId: Number.isFinite(ticketId) ? ticketId : 0,
+        ok: r.ok === true,
+        options,
         error: r.error != null ? String(r.error) : null,
       },
     };

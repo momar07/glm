@@ -111,6 +111,9 @@ export function createWebApi(): MainApi {
     // The chat window is a desktop-only surface; on web these no-op.
     agentWhatsAppThread: async () => {},
     agentWhatsAppStatus: async () => {},
+    agentWhatsAppMedia: async () => {},
+    agentWhatsAppTransferOptions: async () => {},
+    agentWhatsAppTransfer: async () => {},
     agentOpenWhatsAppChat: async () => {},
     agentCloseWhatsAppChat: async () => {},
     agentMinimizeWhatsAppChat: async () => {},
@@ -120,6 +123,9 @@ export function createWebApi(): MainApi {
     onAgentWhatsAppResult: () => () => {},
     onAgentWhatsAppThread: () => () => {},
     onAgentWhatsAppStatusResult: () => () => {},
+    onAgentWhatsAppMediaResult: () => () => {},
+    onAgentWhatsAppTransferOptions: () => () => {},
+    onAgentWhatsAppTransferResult: () => () => {},
     onAgentWhatsAppFocus: () => () => {},
     setTrustedHost: async () => {},
     // The native engine is a Windows helper of the desktop app.

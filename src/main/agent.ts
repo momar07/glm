@@ -11,9 +11,12 @@ import {
   pongJson,
   statusChangeJson,
   statusChanged,
+  whatsAppMediaJson,
   whatsAppReplyJson,
   whatsAppStatusJson,
   whatsAppThreadJson,
+  whatsAppTransferJson,
+  whatsAppTransferOptionsJson,
   workspaceUrl,
 } from '../shared/agent';
 import type {
@@ -23,9 +26,12 @@ import type {
   AgentProfile,
   AgentState,
   AgentWhatsAppEvent,
+  AgentWhatsAppMediaEvent,
   AgentWhatsAppResultEvent,
   AgentWhatsAppStatusEvent,
   AgentWhatsAppThreadEvent,
+  AgentWhatsAppTransferEvent,
+  AgentWhatsAppTransferOptionsEvent,
 } from '../shared/types';
 import { mainLog } from './logger';
 
@@ -74,6 +80,9 @@ export class AgentService {
     private emitWhatsAppResult: (r: AgentWhatsAppResultEvent) => void = () => {},
     private emitWhatsAppThread: (r: AgentWhatsAppThreadEvent) => void = () => {},
     private emitWhatsAppStatus: (r: AgentWhatsAppStatusEvent) => void = () => {},
+    private emitWhatsAppMedia: (r: AgentWhatsAppMediaEvent) => void = () => {},
+    private emitWhatsAppTransferOptions: (r: AgentWhatsAppTransferOptionsEvent) => void = () => {},
+    private emitWhatsAppTransfer: (r: AgentWhatsAppTransferEvent) => void = () => {},
   ) {}
 
   snapshot(): AgentState {
@@ -202,6 +211,31 @@ export class AgentService {
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 
+  // Chat window Phase 3 (v5.30): media send + transfer. Same socket,
+  // same relay pattern; the answers come back as
+  // whatsapp_media_result / whatsapp_transfer_options_result /
+  // whatsapp_transfer_result.
+  whatsAppMedia(
+    ticketId: number,
+    file: { filename: string; mime: string; caption?: string; dataBase64: string },
+  ): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppMediaJson(ticketId, file));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
+  whatsAppTransferOptions(ticketId: number): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppTransferOptionsJson(ticketId));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
+  whatsAppTransfer(ticketId: number, target: { agentId?: number; teamId?: number }): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(whatsAppTransferJson(ticketId, target));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
   // Opens the WhatsApp module inside Issabel (system browser). The URL is
   // built by the renderer from the middleware base (issabelModuleUrl);
   // only http(s) URLs are ever handed to the shell.
@@ -307,6 +341,21 @@ export class AgentService {
     if (ev.kind === 'whatsapp_status') {
       // Chat window: the outcome of a status action.
       this.emitWhatsAppStatus({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_media') {
+      // Chat window: the outcome of a media send.
+      this.emitWhatsAppMedia({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_transfer_options') {
+      // Chat window: the transfer menu's data.
+      this.emitWhatsAppTransferOptions({ ...ev.result, receivedAt: Date.now() });
+      return;
+    }
+    if (ev.kind === 'whatsapp_transfer') {
+      // Chat window: the outcome of a transfer.
+      this.emitWhatsAppTransfer({ ...ev.result, receivedAt: Date.now() });
       return;
     }
     if (ev.kind !== 'state') return;

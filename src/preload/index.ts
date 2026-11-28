@@ -28,6 +28,11 @@ const api: MainApi = {
   agentWhatsAppReply: (ticketId, text) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_REPLY, ticketId, text),
   agentWhatsAppThread: (ticketId) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_THREAD, ticketId),
   agentWhatsAppStatus: (ticketId, status) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_STATUS, ticketId, status),
+  agentWhatsAppMedia: (ticketId, file) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_MEDIA, ticketId, file),
+  agentWhatsAppTransferOptions: (ticketId) =>
+    ipcRenderer.invoke(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS, ticketId),
+  agentWhatsAppTransfer: (ticketId, target) =>
+    ipcRenderer.invoke(IPC.AGENT_WHATSAPP_TRANSFER, ticketId, target),
   agentOpenWhatsAppChat: (ticketId) => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_OPEN_CHAT, ticketId),
   agentCloseWhatsAppChat: () => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_CLOSE_CHAT),
   agentMinimizeWhatsAppChat: () => ipcRenderer.invoke(IPC.AGENT_WHATSAPP_MIN_CHAT),
@@ -37,6 +42,9 @@ const api: MainApi = {
   onAgentWhatsAppResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_RESULT, cb),
   onAgentWhatsAppThread: (cb) => subscribe(IPC.AGENT_WHATSAPP_THREAD_RESULT, cb),
   onAgentWhatsAppStatusResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_STATUS_RESULT, cb),
+  onAgentWhatsAppMediaResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_MEDIA_RESULT, cb),
+  onAgentWhatsAppTransferOptions: (cb) => subscribe(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT, cb),
+  onAgentWhatsAppTransferResult: (cb) => subscribe(IPC.AGENT_WHATSAPP_TRANSFER_RESULT, cb),
   onAgentWhatsAppFocus: (cb) => subscribe(IPC.AGENT_WHATSAPP_FOCUS, cb),
   setTrustedHost: (host, trust) => ipcRenderer.invoke(IPC.TLS_TRUST_HOST, host, trust),
   sipAvailable: () => ipcRenderer.invoke(IPC.SIP_AVAILABLE),

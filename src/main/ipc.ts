@@ -146,6 +146,9 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     (r) => sendAll(IPC.AGENT_WHATSAPP_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_THREAD_RESULT, r),
     (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_STATUS_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_MEDIA_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT, r),
+    (r) => getWhatsAppWindow()?.webContents.send(IPC.AGENT_WHATSAPP_TRANSFER_RESULT, r),
   );
   const svc = agent;
 
@@ -179,6 +182,33 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
     if (status !== 'open' && status !== 'pending' && status !== 'closed') throw new Error('invalid status');
     svc.whatsAppStatus(ticketId, status);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_MEDIA, (_e, ticketId: unknown, file: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    const f = file as { filename?: unknown; mime?: unknown; caption?: unknown; dataBase64?: unknown } | null;
+    if (!f || typeof f.dataBase64 !== 'string' || !f.dataBase64) throw new Error('invalid media file');
+    // The service enforces the real cap (Settings, D6); this is only a
+    // sanity bound so a corrupt renderer cannot flood the socket —
+    // ~40 MB of base64 ≈ a 30 MB file.
+    if (f.dataBase64.length > 40 * 1024 * 1024) throw new Error('file too large');
+    svc.whatsAppMedia(ticketId, {
+      filename: typeof f.filename === 'string' && f.filename ? f.filename.slice(0, 200) : 'file',
+      mime: typeof f.mime === 'string' && f.mime ? f.mime.slice(0, 120) : 'application/octet-stream',
+      caption: typeof f.caption === 'string' ? f.caption.slice(0, 1000) : '',
+      dataBase64: f.dataBase64,
+    });
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_TRANSFER_OPTIONS, (_e, ticketId: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    svc.whatsAppTransferOptions(ticketId);
+  });
+  ipcMain.handle(IPC.AGENT_WHATSAPP_TRANSFER, (_e, ticketId: unknown, target: unknown) => {
+    if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');
+    const t = target as { agentId?: unknown; teamId?: unknown } | null;
+    const agentId = t && typeof t.agentId === 'number' && Number.isFinite(t.agentId) ? t.agentId : undefined;
+    const teamId = t && typeof t.teamId === 'number' && Number.isFinite(t.teamId) ? t.teamId : undefined;
+    if ((agentId == null) === (teamId == null)) throw new Error('invalid transfer target');
+    svc.whatsAppTransfer(ticketId, { agentId, teamId });
   });
   ipcMain.handle(IPC.AGENT_WHATSAPP_OPEN_CHAT, (_e, ticketId: unknown) => {
     if (typeof ticketId !== 'number' || !Number.isFinite(ticketId)) throw new Error('invalid ticket');

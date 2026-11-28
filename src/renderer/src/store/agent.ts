@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { issabelModuleUrl, parseWsUrl } from '@shared/agent';
-import type { WhatsAppThread, WhatsAppTicket } from '@shared/agent';
+import type { WhatsAppThread, WhatsAppTicket, WhatsAppTransferOptions } from '@shared/agent';
 import type { AgentPopEvent, AgentProfile, AgentState } from '@shared/types';
 import { logger } from '../lib/logger';
 import { useSip } from './sip';
@@ -140,6 +140,13 @@ export interface WhatsAppChatState {
   errors: Record<number, string | null>;
   statusBusy: Record<number, boolean>;
   statusError: Record<number, string | null>;
+  // Phase 3 (v5.30): media send outcome per ticket, and the transfer
+  // menu's data + outcome per ticket.
+  mediaStatus: Record<number, { state: 'sending' | 'sent' | 'error'; error?: string; at: number }>;
+  transferOptions: Record<number, WhatsAppTransferOptions | null>;
+  transferBusy: Record<number, boolean>;
+  transferError: Record<number, string | null>;
+  transferDoneAt: Record<number, number>;
 }
 
 const BLANK_CHAT: WhatsAppChatState = {
@@ -149,6 +156,11 @@ const BLANK_CHAT: WhatsAppChatState = {
   errors: {},
   statusBusy: {},
   statusError: {},
+  mediaStatus: {},
+  transferOptions: {},
+  transferBusy: {},
+  transferError: {},
+  transferDoneAt: {},
 };
 
 interface AgentStore {
@@ -181,6 +193,12 @@ interface AgentStore {
   openWhatsAppChat: (ticketId: number) => Promise<void>;
   requestWhatsAppThread: (ticketId: number) => Promise<void>;
   setWhatsAppStatus: (ticketId: number, status: 'open' | 'pending' | 'closed') => Promise<void>;
+  sendWhatsAppMedia: (
+    ticketId: number,
+    file: { filename: string; mime: string; caption?: string; dataBase64: string },
+  ) => Promise<void>;
+  requestWhatsAppTransferOptions: (ticketId: number) => Promise<void>;
+  transferWhatsApp: (ticketId: number, target: { agentId?: number; teamId?: number }) => Promise<void>;
 }
 
 let bound = false;
@@ -287,6 +305,67 @@ export const useAgent = create<AgentStore>((set, get) => {
           };
         });
         logger.info('agent', `WhatsApp status for ticket ${r.ticketId}: ${r.ok ? r.status : 'failed'}`);
+      });
+      window.api.onAgentWhatsAppMediaResult((r) => {
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            mediaStatus: {
+              ...cur.chat.mediaStatus,
+              [r.ticketId]: {
+                state: r.ok ? 'sent' : 'error',
+                error: r.ok ? undefined : r.error || 'Media send failed',
+                at: r.receivedAt,
+              },
+            },
+          },
+        }));
+        logger.info('agent', `WhatsApp media for ticket ${r.ticketId}: ${r.ok ? 'queued' : 'failed'}`);
+        // The service also pushes a fresh snapshot, whose preview
+        // change refetches the open thread — but pull it directly too
+        // when this window has the ticket open, so the attachment
+        // shows up even if the preview text did not change.
+        if (r.ok && get().chat.ticketId === r.ticketId) {
+          void get().requestWhatsAppThread(r.ticketId);
+        }
+      });
+      window.api.onAgentWhatsAppTransferOptions((r) => {
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            transferOptions: {
+              ...cur.chat.transferOptions,
+              [r.ticketId]: r.ok ? r.options : cur.chat.transferOptions[r.ticketId],
+            },
+            transferError: {
+              ...cur.chat.transferError,
+              [r.ticketId]: r.ok ? cur.chat.transferError[r.ticketId] : r.error || 'Could not load transfer targets',
+            },
+          },
+        }));
+        if (!r.ok) logger.error('agent', `WhatsApp transfer options ${r.ticketId} failed: ${r.error || 'unknown'}`);
+      });
+      window.api.onAgentWhatsAppTransferResult((r) => {
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            transferBusy: { ...cur.chat.transferBusy, [r.ticketId]: false },
+            transferError: {
+              ...cur.chat.transferError,
+              [r.ticketId]: r.ok ? null : r.error || 'Transfer failed',
+            },
+            transferDoneAt: r.ok
+              ? { ...cur.chat.transferDoneAt, [r.ticketId]: r.receivedAt }
+              : cur.chat.transferDoneAt,
+          },
+        }));
+        logger.info('agent', `WhatsApp transfer for ticket ${r.ticketId}: ${r.ok ? 'done' : 'failed'}`);
+        // A transferred ticket usually leaves this agent (or comes
+        // back via the queue): refresh the open thread if it is still
+        // ours; the snapshot settles the list either way.
+        if (r.ok && get().chat.ticketId === r.ticketId) {
+          void get().requestWhatsAppThread(r.ticketId);
+        }
       });
       window.api.onAgentWhatsAppFocus((f) => {
         // The main process opened (or re-focused) the chat window on
@@ -480,6 +559,71 @@ export const useAgent = create<AgentStore>((set, get) => {
             ...cur.chat,
             statusBusy: { ...cur.chat.statusBusy, [ticketId]: false },
             statusError: { ...cur.chat.statusError, [ticketId]: msg },
+          },
+        }));
+      }
+    },
+
+    // Phase 3 (v5.30): attach a photo/file to the conversation. The
+    // file already passed the window's size check against the cap the
+    // thread payload advertised; the service enforces it again.
+    async sendWhatsAppMedia(ticketId, file) {
+      set((cur) => ({
+        chat: {
+          ...cur.chat,
+          mediaStatus: { ...cur.chat.mediaStatus, [ticketId]: { state: 'sending', at: Date.now() } },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppMedia(ticketId, file);
+        // The outcome arrives via onAgentWhatsAppMediaResult.
+      } catch (e) {
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            mediaStatus: {
+              ...cur.chat.mediaStatus,
+              [ticketId]: {
+                state: 'error',
+                error: e instanceof Error ? e.message : 'Media send failed',
+                at: Date.now(),
+              },
+            },
+          },
+        }));
+      }
+    },
+
+    async requestWhatsAppTransferOptions(ticketId) {
+      try {
+        await window.api.agentWhatsAppTransferOptions(ticketId);
+        // The options arrive via onAgentWhatsAppTransferOptions.
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Could not load transfer targets';
+        set((cur) => ({
+          chat: { ...cur.chat, transferError: { ...cur.chat.transferError, [ticketId]: msg } },
+        }));
+      }
+    },
+
+    async transferWhatsApp(ticketId, target) {
+      set((cur) => ({
+        chat: {
+          ...cur.chat,
+          transferBusy: { ...cur.chat.transferBusy, [ticketId]: true },
+          transferError: { ...cur.chat.transferError, [ticketId]: null },
+        },
+      }));
+      try {
+        await window.api.agentWhatsAppTransfer(ticketId, target);
+        // The outcome arrives via onAgentWhatsAppTransferResult.
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Transfer failed';
+        set((cur) => ({
+          chat: {
+            ...cur.chat,
+            transferBusy: { ...cur.chat.transferBusy, [ticketId]: false },
+            transferError: { ...cur.chat.transferError, [ticketId]: msg },
           },
         }));
       }

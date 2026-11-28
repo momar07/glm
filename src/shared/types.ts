@@ -1,6 +1,12 @@
 // Shared types used across main, preload, and renderer processes.
 
-import type { AgentCustomer, AgentInteraction, WhatsAppThread, WhatsAppTicket } from './agent';
+import type {
+  AgentCustomer,
+  AgentInteraction,
+  WhatsAppThread,
+  WhatsAppTicket,
+  WhatsAppTransferOptions,
+} from './agent';
 import type { SipEngineEvent, SipHelperAnswer, SipHelperCommand } from './sipHelper';
 
 export type Presence =
@@ -219,6 +225,32 @@ export interface AgentWhatsAppStatusEvent {
   receivedAt: number;
 }
 
+// The chat window's media send outcome (Phase 3, v5.30).
+export interface AgentWhatsAppMediaEvent {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+  receivedAt: number;
+}
+
+// The chat window's transfer outcome (Phase 3, v5.30).
+export interface AgentWhatsAppTransferEvent {
+  ticketId: number;
+  ok: boolean;
+  error: string | null;
+  receivedAt: number;
+}
+
+// The chat window's transfer menu data (Phase 3, v5.30): the module's
+// agents and queues, with the ticket's current owner marked.
+export interface AgentWhatsAppTransferOptionsEvent {
+  ticketId: number;
+  ok: boolean;
+  options: WhatsAppTransferOptions | null;
+  error: string | null;
+  receivedAt: number;
+}
+
 // Main -> chat window: show this ticket (the window was opened or
 // re-focused on a ticket from the bar's drawer).
 export interface AgentWhatsAppFocusEvent {
@@ -254,6 +286,12 @@ export const IPC = {
   AGENT_WHATSAPP_THREAD_RESULT: 'agent:whatsapp-thread-result',
   AGENT_WHATSAPP_STATUS: 'agent:whatsapp-status',
   AGENT_WHATSAPP_STATUS_RESULT: 'agent:whatsapp-status-result',
+  AGENT_WHATSAPP_MEDIA: 'agent:whatsapp-media',
+  AGENT_WHATSAPP_MEDIA_RESULT: 'agent:whatsapp-media-result',
+  AGENT_WHATSAPP_TRANSFER_OPTIONS: 'agent:whatsapp-transfer-options',
+  AGENT_WHATSAPP_TRANSFER_OPTIONS_RESULT: 'agent:whatsapp-transfer-options-result',
+  AGENT_WHATSAPP_TRANSFER: 'agent:whatsapp-transfer',
+  AGENT_WHATSAPP_TRANSFER_RESULT: 'agent:whatsapp-transfer-result',
   AGENT_WHATSAPP_OPEN_CHAT: 'agent:whatsapp-open-chat',
   AGENT_WHATSAPP_FOCUS: 'agent:whatsapp-focus',
   AGENT_WHATSAPP_CLOSE_CHAT: 'agent:whatsapp-close-chat',
@@ -298,6 +336,13 @@ export interface MainApi {
   // agent socket through the middleware, like the quick reply.
   agentWhatsAppThread(ticketId: number): Promise<void>;
   agentWhatsAppStatus(ticketId: number, status: string): Promise<void>;
+  // Phase 3 (v5.30): media sending + transfer from the chat window.
+  agentWhatsAppMedia(
+    ticketId: number,
+    file: { filename: string; mime: string; caption?: string; dataBase64: string },
+  ): Promise<void>;
+  agentWhatsAppTransferOptions(ticketId: number): Promise<void>;
+  agentWhatsAppTransfer(ticketId: number, target: { agentId?: number; teamId?: number }): Promise<void>;
   agentOpenWhatsAppChat(ticketId: number): Promise<void>;
   agentCloseWhatsAppChat(): Promise<void>;
   agentMinimizeWhatsAppChat(): Promise<void>;
@@ -307,6 +352,9 @@ export interface MainApi {
   onAgentWhatsAppResult(cb: (r: AgentWhatsAppResultEvent) => void): () => void;
   onAgentWhatsAppThread(cb: (r: AgentWhatsAppThreadEvent) => void): () => void;
   onAgentWhatsAppStatusResult(cb: (r: AgentWhatsAppStatusEvent) => void): () => void;
+  onAgentWhatsAppMediaResult(cb: (r: AgentWhatsAppMediaEvent) => void): () => void;
+  onAgentWhatsAppTransferOptions(cb: (r: AgentWhatsAppTransferOptionsEvent) => void): () => void;
+  onAgentWhatsAppTransferResult(cb: (r: AgentWhatsAppTransferEvent) => void): () => void;
   onAgentWhatsAppFocus(cb: (f: AgentWhatsAppFocusEvent) => void): () => void;
   setTrustedHost(host: string, trust: boolean): Promise<void>;
   // The native engine (the sip-helper.exe of Windows). Available only when the

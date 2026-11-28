@@ -13,11 +13,16 @@ import { useAgent } from '../store/agent';
 //
 // Identity badge: the circle beside each customer name carries the
 // LINE (channel account — color + two-letter code) the conversation
-// came in on, with the queue/team code under it, so with several
-// WhatsApp lines an agent sees at a glance which line a conversation
-// belongs to — like the queue badge on a call. The module has no
-// WhatsApp queues yet: the lower half shows the team until queues
-// land, and the thread payload already carries a queue slot.
+// came in on, with the queue code under it, so with several WhatsApp
+// lines an agent sees at a glance which line a conversation belongs
+// to — like the queue badge on a call. (Queues landed in v5.25; the
+// lower half falls back to the team for pre-queue tickets.)
+//
+// Phase 3 (v5.30): the composer can attach a photo/file (the thread
+// payload advertises the Settings media cap and whether this channel
+// supports media at all — unofficial only for now), and the header's
+// Transfer menu hands the conversation to another agent or back to a
+// queue, through the module's own transfer rules.
 
 const CHANNEL_COLORS = ['#0d9488', '#7c3aed', '#d97706', '#2563eb', '#db2777', '#059669', '#9333ea', '#0891b2'];
 
@@ -175,10 +180,16 @@ export function WhatsAppChatApp(): React.ReactElement {
   const sendWhatsAppReply = useAgent((s) => s.sendWhatsAppReply);
   const requestWhatsAppThread = useAgent((s) => s.requestWhatsAppThread);
   const setWhatsAppStatus = useAgent((s) => s.setWhatsAppStatus);
+  const sendWhatsAppMedia = useAgent((s) => s.sendWhatsAppMedia);
+  const requestWhatsAppTransferOptions = useAgent((s) => s.requestWhatsAppTransferOptions);
+  const transferWhatsApp = useAgent((s) => s.transferWhatsApp);
 
   const [query, setQuery] = useState('');
   const [text, setText] = useState('');
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const sigRef = useRef<string>('');
 
   useEffect(() => {
@@ -196,6 +207,8 @@ export function WhatsAppChatApp(): React.ReactElement {
   // A fresh draft per conversation.
   useEffect(() => {
     setText('');
+    setTransferOpen(false);
+    setAttachError(null);
     sigRef.current = '';
   }, [ticketId]);
 
@@ -203,6 +216,23 @@ export function WhatsAppChatApp(): React.ReactElement {
   useEffect(() => {
     if (replyState?.state === 'sent') setText('');
   }, [replyState]);
+
+  const mediaState = ticketId != null ? chat.mediaStatus[ticketId] : undefined;
+  const transferOptions = ticketId != null ? chat.transferOptions[ticketId] : undefined;
+  const transferBusy = ticketId != null ? !!chat.transferBusy[ticketId] : false;
+  const transferError = ticketId != null ? chat.transferError[ticketId] : null;
+  const transferDoneAt = ticketId != null ? chat.transferDoneAt[ticketId] : undefined;
+
+  // The composer text rides as the media caption; clear it once the
+  // module accepted the attachment.
+  useEffect(() => {
+    if (mediaState?.state === 'sent') setText('');
+  }, [mediaState]);
+
+  // Close the transfer menu once a transfer lands.
+  useEffect(() => {
+    if (transferDoneAt) setTransferOpen(false);
+  }, [transferDoneAt]);
 
   // Opened without a specific ticket (the bar's WhatsApp button):
   // land on the most recent conversation as soon as the list is in.
@@ -253,6 +283,48 @@ export function WhatsAppChatApp(): React.ReactElement {
   const lowerName = queueName || teamName;
   const contactName = thread?.ticket.contactName || snapTicket?.contactName || snapTicket?.phone || '';
   const contactNumber = thread?.ticket.contactNumber || snapTicket?.phone || '';
+
+  // Phase 3: what this conversation's composer may attach. The cap
+  // and the unofficial-only rule come from the thread payload (the
+  // module's Settings); the service enforces both again server-side.
+  const mediaSupported = thread?.ticket.mediaSupported ?? false;
+  const mediaMaxMb = thread?.ticket.mediaMaxMb ?? 10;
+
+  const onFilePicked = (f: File | null): void => {
+    if (!f || ticketId == null) return;
+    setAttachError(null);
+    if (f.size > mediaMaxMb * 1024 * 1024) {
+      setAttachError(
+        `That file is ${(f.size / (1024 * 1024)).toFixed(1)} MB — the limit is ${mediaMaxMb} MB.`,
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || '');
+      const comma = url.indexOf(',');
+      const dataBase64 = comma >= 0 ? url.slice(comma + 1) : '';
+      if (!dataBase64) {
+        setAttachError('Could not read that file.');
+        return;
+      }
+      void sendWhatsAppMedia(ticketId, {
+        filename: f.name,
+        mime: f.type || 'application/octet-stream',
+        caption: text.trim() || undefined,
+        dataBase64,
+      });
+    };
+    reader.onerror = () => setAttachError('Could not read that file.');
+    reader.readAsDataURL(f);
+  };
+
+  const toggleTransfer = (): void => {
+    if (ticketId == null) return;
+    const next = !transferOpen;
+    setTransferOpen(next);
+    if (next) void requestWhatsAppTransferOptions(ticketId);
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0f172a] text-slate-100 overflow-hidden">
@@ -384,18 +456,84 @@ export function WhatsAppChatApp(): React.ReactElement {
                     </select>
                   </div>
                 </div>
-                <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[#1e293b]">
+                <div className="relative shrink-0 flex items-center gap-2 px-4 py-2 border-b border-[#1e293b]">
                   <button
                     onClick={() => void openWhatsApp()}
                     className="px-3 py-1.5 rounded-full bg-[#1e293b] border border-sky-500/60 text-sky-300 text-[11px] font-bold hover:bg-slate-700 transition"
                   >
                     Open in Nero ↗
                   </button>
+                  <button
+                    onClick={toggleTransfer}
+                    disabled={status === 'closed'}
+                    className="px-3 py-1.5 rounded-full bg-[#1e293b] border border-violet-500/60 text-violet-300 text-[11px] font-bold hover:bg-slate-700 transition disabled:opacity-40"
+                    title={status === 'closed' ? 'This ticket is closed' : 'Transfer this conversation'}
+                  >
+                    Transfer ⇄
+                  </button>
                   {statusError && <span className="text-[11px] text-red-300">{statusError}</span>}
                   {thread?.ticket.assignedUsername && (
                     <span className="text-[10px] text-slate-500 ml-auto">
                       Assigned: {thread.ticket.assignedUsername}
                     </span>
+                  )}
+                  {transferOpen && (
+                    <div className="absolute left-4 top-full z-20 mt-1 w-[264px] max-h-[320px] overflow-y-auto rounded-2xl bg-[#1e293b] border border-[#475569] shadow-2xl p-2">
+                      <div className="text-[10px] font-extrabold text-slate-400 px-2 py-1">TRANSFER TO</div>
+                      {transferError && (
+                        <div className="text-[11px] text-red-300 px-2 py-1">{transferError}</div>
+                      )}
+                      {transferBusy && (
+                        <div className="text-[11px] text-slate-400 px-2 py-1">Transferring…</div>
+                      )}
+                      {!transferOptions && !transferError && (
+                        <div className="text-[11px] text-slate-400 px-2 py-1">Loading targets…</div>
+                      )}
+                      {transferOptions && (
+                        <>
+                          {transferOptions.agents.length > 0 && (
+                            <div className="text-[9px] font-bold text-slate-500 px-2 pt-1.5">AGENTS</div>
+                          )}
+                          {transferOptions.agents.map((a) => (
+                            <button
+                              key={'a' + a.uid}
+                              disabled={transferBusy || a.uid === transferOptions.currentAgent}
+                              onClick={() => void transferWhatsApp(ticketId, { agentId: a.uid })}
+                              className="w-full text-left px-2 py-1.5 rounded-lg text-[12px] text-slate-200 hover:bg-slate-700/70 transition disabled:opacity-40"
+                            >
+                              {a.uname}
+                              {a.uid === transferOptions.currentAgent && (
+                                <span className="text-slate-500 text-[10px]"> · current</span>
+                              )}
+                            </button>
+                          ))}
+                          {transferOptions.teams.length > 0 && (
+                            <div className="text-[9px] font-bold text-slate-500 px-2 pt-2">QUEUES</div>
+                          )}
+                          {transferOptions.teams.map((t) => (
+                            <button
+                              key={'q' + t.id}
+                              disabled={transferBusy || t.id === transferOptions.currentTeam}
+                              onClick={() => void transferWhatsApp(ticketId, { teamId: t.id })}
+                              className="w-full text-left px-2 py-1.5 rounded-lg text-[12px] text-slate-200 hover:bg-slate-700/70 transition disabled:opacity-40 flex items-center gap-2"
+                            >
+                              <span className="flex-1 truncate">{t.name}</span>
+                              {t.code && (
+                                <span className="text-[9px] font-extrabold text-emerald-300 bg-emerald-500/15 border border-emerald-500/40 rounded px-1 py-0.5">
+                                  {t.code}
+                                </span>
+                              )}
+                              {t.id === transferOptions.currentTeam && (
+                                <span className="text-slate-500 text-[10px]">current</span>
+                              )}
+                            </button>
+                          ))}
+                          {transferOptions.agents.length === 0 && transferOptions.teams.length === 0 && (
+                            <div className="text-[11px] text-slate-400 px-2 py-1">No transfer targets</div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -419,10 +557,24 @@ export function WhatsAppChatApp(): React.ReactElement {
                 </div>
 
                 <div className="shrink-0 flex items-end gap-2 px-3 py-2.5 border-t border-[#1e293b]">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      onFilePicked(e.target.files && e.target.files[0] ? e.target.files[0] : null);
+                      e.target.value = '';
+                    }}
+                  />
                   <button
-                    disabled
-                    title="Sending media from the chat window arrives in the next slice"
-                    className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#334155] text-slate-500 text-sm flex items-center justify-center shrink-0 opacity-50 cursor-not-allowed"
+                    disabled={!mediaSupported || mediaState?.state === 'sending'}
+                    onClick={() => fileRef.current?.click()}
+                    title={
+                      mediaSupported
+                        ? `Attach a photo or file (max ${mediaMaxMb} MB) — the message text goes as its caption`
+                        : 'Media sending works on unofficial channels for now'
+                    }
+                    className="w-8 h-8 rounded-full bg-[#1e293b] border border-[#334155] text-slate-300 text-sm flex items-center justify-center shrink-0 hover:bg-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
@@ -456,6 +608,22 @@ export function WhatsAppChatApp(): React.ReactElement {
                   )}
                   {replyState?.state === 'error' && (
                     <span className="text-[10px] text-red-300">{replyState.error}</span>
+                  )}
+                  {mediaState?.state === 'sending' && (
+                    <span className="text-[10px] text-slate-400"> Sending attachment…</span>
+                  )}
+                  {mediaState?.state === 'sent' && (
+                    <span className="text-[10px] text-emerald-300"> Attachment queued ✓</span>
+                  )}
+                  {mediaState?.state === 'error' && (
+                    <span className="text-[10px] text-red-300"> {mediaState.error}</span>
+                  )}
+                  {attachError && <span className="text-[10px] text-red-300"> {attachError}</span>}
+                  {thread && !mediaSupported && (
+                    <span className="text-[10px] text-slate-500">
+                      {' '}
+                      Media sending works on unofficial channels for now.
+                    </span>
                   )}
                 </div>
               </>
