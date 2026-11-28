@@ -204,6 +204,8 @@ interface AgentStore {
   login: (form: AgentLoginForm) => Promise<boolean>;
   logout: () => Promise<void>;
   setStatus: (status: 'available' | 'pause', reason: string) => Promise<void>;
+  chatPaused: boolean;
+  setChatPaused: (paused: boolean) => Promise<void>;
   clearPop: () => void;
   openRecord: (phone: string, uid: string) => Promise<void>;
   openWhatsApp: () => Promise<void>;
@@ -229,6 +231,7 @@ export const useAgent = create<AgentStore>((set, get) => {
     state: BLANK_STATE,
     profile: null,
     pop: null,
+    chatPaused: false,
     whatsapp: BLANK_WHATSAPP,
     chat: BLANK_CHAT,
     apiUrl: saved.apiUrl,
@@ -506,7 +509,7 @@ export const useAgent = create<AgentStore>((set, get) => {
       // the SIP registration of the agent goes with the agent session
       await useSip.getState().disconnect().catch(() => {});
       await window.api.agentLogout().catch(() => {});
-      set({ state: BLANK_STATE, profile: null, pop: null, whatsapp: BLANK_WHATSAPP, chat: BLANK_CHAT });
+      set({ state: BLANK_STATE, profile: null, pop: null, chatPaused: false, whatsapp: BLANK_WHATSAPP, chat: BLANK_CHAT });
       logger.info('agent', 'logged out');
     },
 
@@ -518,6 +521,21 @@ export const useAgent = create<AgentStore>((set, get) => {
         const msg = e instanceof Error ? e.message : String(e);
         set({ actionError: msg });
         logger.error('agent', `status change failed: ${msg}`);
+      }
+    },
+
+    // Split pause (v5.35): chats only. Optimistic — the middleware
+    // applies it to the session and the next presence push carries
+    // it; a failed send surfaces through actionError like setStatus.
+    async setChatPaused(paused) {
+      try {
+        await window.api.agentSetChatPaused(paused);
+        set({ chatPaused: paused, actionError: null });
+        logger.info('agent', paused ? 'chats paused' : 'chats resumed');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        set({ actionError: msg });
+        logger.error('agent', `chat pause failed: ${msg}`);
       }
     },
 

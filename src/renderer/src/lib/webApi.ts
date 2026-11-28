@@ -105,6 +105,7 @@ export function createWebApi(): MainApi {
     agentLogin: async () => ({ ok: false as const, error: 'Agent mode needs the desktop app' }),
     agentLogout: async () => {},
     agentSetStatus: async () => {},
+    agentSetChatPaused: async () => {},
     agentOpenRecord: async () => {},
     agentOpenWhatsApp: async () => {},
     agentWhatsAppReply: async () => {},

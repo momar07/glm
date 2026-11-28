@@ -284,6 +284,7 @@ export const IPC = {
   AGENT_LOGIN: 'agent:login',
   AGENT_LOGOUT: 'agent:logout',
   AGENT_STATUS: 'agent:status',
+  AGENT_CHAT_PAUSE: 'agent:chat-pause',
   AGENT_OPEN_RECORD: 'agent:open-record',
   AGENT_OPEN_WHATSAPP: 'agent:open-whatsapp',
   AGENT_STATE: 'agent:state',
@@ -339,6 +340,7 @@ export interface MainApi {
   agentLogin(req: AgentLoginRequest): Promise<AgentLoginOutcome>;
   agentLogout(): Promise<void>;
   agentSetStatus(status: 'available' | 'pause', reason: string): Promise<void>;
+  agentSetChatPaused(paused: boolean): Promise<void>;
   agentOpenRecord(phone: string, uid: string, baseUrl?: string): Promise<void>;
   agentOpenWhatsApp(url: string): Promise<void>;
   agentWhatsAppReply(ticketId: number, text: string): Promise<void>;

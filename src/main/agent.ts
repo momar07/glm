@@ -9,6 +9,7 @@ import {
   parseAgentEvent,
   parseLoginResponse,
   pongJson,
+  chatPauseJson,
   statusChangeJson,
   statusChanged,
   whatsAppMediaJson,
@@ -186,6 +187,13 @@ export class AgentService {
   setStatus(status: 'available' | 'pause', reason: string): void {
     if (!this.session) throw new Error('not logged in');
     const ok = this.sendRaw(statusChangeJson(this.session.extension, status, reason));
+    if (!ok) throw new Error('the agent socket is disconnected');
+  }
+
+  // Split pause (v5.35): chats only — the voice session is untouched.
+  setChatPaused(paused: boolean): void {
+    if (!this.session) throw new Error('not logged in');
+    const ok = this.sendRaw(chatPauseJson(paused));
     if (!ok) throw new Error('the agent socket is disconnected');
   }
 

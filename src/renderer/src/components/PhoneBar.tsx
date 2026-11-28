@@ -79,6 +79,8 @@ export function PhoneBar({
   const makeCall = useCall((s) => s.makeCall);
   const agent = useAgent((s) => s.state);
   const agentSetStatus = useAgent((s) => s.setStatus);
+  const chatPaused = useAgent((s) => s.chatPaused);
+  const setChatPaused = useAgent((s) => s.setChatPaused);
   const agentLogout = useAgent((s) => s.logout);
   const pop = useAgent((s) => s.pop);
   const whatsapp = useAgent((s) => s.whatsapp);
@@ -115,17 +117,17 @@ export function PhoneBar({
   const [now, setNow] = useState(Date.now());
 
   // WhatsApp assignment toast: appears when the store stamps a NEW
-  // assignment (lastAssignedAt changes), auto-dismisses after ~6s, and
-  // clicking it opens the WhatsApp drawer. Quiet by design — no sound,
-  // no focus steal; the ref guard keeps re-renders from re-toasting.
+  // assignment (lastAssignedAt changes) and STAYS until the agent
+  // clicks it (opens the chat) or dismisses it — since v5.35 an
+  // assignment must never slip by unnoticed (a swept chat was lost
+  // to a 6-second auto-dismiss). Quiet by design — no sound, no
+  // focus steal; the ref guard keeps re-renders from re-toasting.
   const waToastSeenRef = useRef(0);
   useEffect(() => {
     if (!whatsapp.lastAssigned || whatsapp.lastAssignedAt <= 0) return;
     if (whatsapp.lastAssignedAt === waToastSeenRef.current) return;
     waToastSeenRef.current = whatsapp.lastAssignedAt;
     setWaToast(true);
-    const t = setTimeout(() => setWaToast(false), 6000);
-    return () => clearTimeout(t);
   }, [whatsapp.lastAssigned, whatsapp.lastAssignedAt]);
 
   // The toast is a fixed overlay like the logout card: fit the window to
@@ -181,6 +183,12 @@ export function PhoneBar({
         : presence === 'connection-lost'
           ? 'Connection Lost'
           : presence;
+
+  // Split pause (v5.35): with chats paused and voice live, the pill
+  // says so outright (it is short enough for the fixed-width pill);
+  // a voice pause keeps its reason — the menu shows both states.
+  const statusText =
+    chatPaused && agent.loggedIn && !agentPaused ? 'Chats paused' : statusLabel;
 
   const statusSecs =
     agent.loggedIn && agent.statusAtMs > 0
@@ -484,7 +492,7 @@ export function PhoneBar({
                   }`}
                 />
                 <span className="w-[84px] text-white text-[11px] font-semibold pl-1.5 pr-1 py-1 truncate">
-                  {statusLabel}
+                  {statusText}
                 </span>
                 {agent.loggedIn && <span className="text-slate-400 text-[10px] pr-1.5">▼</span>}
                 {agent.loggedIn && (
@@ -532,6 +540,25 @@ export function PhoneBar({
                       </span>
                     </div>
                   ))}
+                  {/* Split pause (v5.35): chats only — voice status above is untouched. */}
+                  <div className="h-px bg-slate-700/60 my-1" />
+                  <div
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setStatusOpen(false);
+                      setStatusPeek(false);
+                      void setChatPaused(!chatPaused);
+                    }}
+                    className="p-2.5 rounded-2xl bg-[#1e293b]/85 border border-[#334155]/80 flex items-center justify-between cursor-pointer transition hover:bg-emerald-500/15 hover:border-emerald-400/50"
+                  >
+                    <div className="flex items-center gap-2">
+                      <WhatsAppGlyph className="w-3.5 h-3.5 text-emerald-300" />
+                      <span className="font-bold text-white">{chatPaused ? 'Resume chats' : 'Pause chats'}</span>
+                    </div>
+                    <span className="text-[10px] font-medium text-emerald-400">
+                      {chatPaused ? 'Chats paused' : 'Chats only'}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -948,13 +975,24 @@ export function PhoneBar({
             <span className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
               <WhatsAppGlyph className="w-4 h-4 text-emerald-300" />
             </span>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="text-[11px] font-bold text-white truncate">New WhatsApp ticket assigned</div>
               <div className="text-[11px] text-slate-400 truncate">
                 {whatsapp.lastAssigned.contactName || whatsapp.lastAssigned.phone}
                 {whatsapp.lastAssigned.preview ? ` — ${whatsapp.lastAssigned.preview}` : ''}
               </div>
             </div>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={(e) => {
+                e.stopPropagation();
+                setWaToast(false);
+              }}
+              className="shrink-0 w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 text-[13px] leading-none flex items-center justify-center"
+            >
+              ×
+            </button>
           </div>
         </div>
       )}

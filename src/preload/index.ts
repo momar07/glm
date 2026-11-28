@@ -22,6 +22,7 @@ const api: MainApi = {
   agentLogin: (req) => ipcRenderer.invoke(IPC.AGENT_LOGIN, req),
   agentLogout: () => ipcRenderer.invoke(IPC.AGENT_LOGOUT),
   agentSetStatus: (status, reason) => ipcRenderer.invoke(IPC.AGENT_STATUS, status, reason),
+  agentSetChatPaused: (paused) => ipcRenderer.invoke(IPC.AGENT_CHAT_PAUSE, paused),
   agentOpenRecord: (phone, uid, baseUrl) =>
     ipcRenderer.invoke(IPC.AGENT_OPEN_RECORD, phone, uid, baseUrl),
   agentOpenWhatsApp: (url) => ipcRenderer.invoke(IPC.AGENT_OPEN_WHATSAPP, url),

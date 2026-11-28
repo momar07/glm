@@ -241,6 +241,13 @@ export function statusChangeJson(extension: string, status: string, reason: stri
   return JSON.stringify({ event: 'status_change', extension, status, reason });
 }
 
+// Split pause (v5.35): pause or resume CHATS only. Voice status and
+// Asterisk are untouched; the middleware folds the flag into the
+// presence it reports to the WhatsApp module.
+export function chatPauseJson(paused: boolean): string {
+  return JSON.stringify({ event: 'chat_pause', paused });
+}
+
 // A quick reply from the WhatsApp drawer (Phase 2). The middleware
 // stamps the agent identity from the session — the payload carries
 // only the ticket and the text.

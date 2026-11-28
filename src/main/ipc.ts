@@ -166,6 +166,10 @@ export function registerIpc(getMainWindow: () => BrowserWindow | null): void {
     if (status !== 'available' && status !== 'pause') throw new Error('invalid agent status');
     svc.setStatus(status, typeof reason === 'string' ? reason : '');
   });
+  ipcMain.handle(IPC.AGENT_CHAT_PAUSE, (_e, paused: unknown) => {
+    if (typeof paused !== 'boolean') throw new Error('invalid chat pause flag');
+    svc.setChatPaused(paused);
+  });
   ipcMain.handle(IPC.AGENT_OPEN_WHATSAPP, (_e, url: unknown) => {
     if (typeof url !== 'string') throw new Error('invalid url');
     return svc.openWhatsApp(url);
