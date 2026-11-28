@@ -87,6 +87,16 @@ fn emit_event(out: &mut impl Write, event: EngineEvent) {
                 .map(|(id, priority)| json!({"id": id, "priority": priority}))
                 .collect::<Vec<_>>(),
         }),
+        EngineEvent::Devices {
+            capture,
+            playback,
+            devices,
+        } => json!({
+            "event": "devices",
+            "capture": capture,
+            "playback": playback,
+            "devices": devices,
+        }),
         EngineEvent::Error { message } => json!({
             "event": "error",
             "message": message,
@@ -135,6 +145,16 @@ fn handle(engine: &Engine, out: &mut impl Write, line: &str) -> bool {
                     vec!["G729".to_string(), "PCMA".to_string(), "PCMU".to_string()]
                 } else {
                     codecs
+                },
+                // the sound devices of the agent, by name; an absent or
+                // empty name keeps the defaults of the system
+                capture_device: match text(&value, "captureDevice") {
+                    name if name.is_empty() => None,
+                    name => Some(name),
+                },
+                playback_device: match text(&value, "playbackDevice") {
+                    name if name.is_empty() => None,
+                    name => Some(name),
                 },
             };
             engine.register(options).map(|_| json!({}))

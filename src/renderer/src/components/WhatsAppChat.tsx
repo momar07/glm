@@ -564,7 +564,7 @@ export function WhatsAppChatApp(): React.ReactElement {
                           {transferOptions.teams.map((t) => (
                             <button
                               key={'q' + t.id}
-                              disabled={transferBusy || t.id === transferOptions.currentTeam}
+                              disabled={transferBusy}
                               onClick={() => void transferWhatsApp(ticketId, { teamId: t.id })}
                               className="w-full text-left px-2 py-1.5 rounded-lg text-[12px] text-slate-200 hover:bg-slate-700/70 transition disabled:opacity-40 flex items-center gap-2"
                             >
@@ -575,7 +575,7 @@ export function WhatsAppChatApp(): React.ReactElement {
                                 </span>
                               )}
                               {t.id === transferOptions.currentTeam && (
-                                <span className="text-slate-500 text-[10px]">current</span>
+                                <span className="text-slate-500 text-[10px]">current — return to queue</span>
                               )}
                             </button>
                           ))}

@@ -60,6 +60,11 @@ export interface IceServerSpec {
 export interface AudioPrefs {
   inputDeviceId?: string;
   outputDeviceId?: string;
+  // The labels of the picked devices, saved alongside the ids: browser
+  // deviceIds mean nothing to the native helper, which matches the
+  // machine's sound devices by name at registration.
+  inputDeviceLabel?: string;
+  outputDeviceLabel?: string;
   ringtoneDeviceId?: string;
   echoCancellation: boolean;
   noiseSuppression: boolean;
@@ -67,6 +72,7 @@ export interface AudioPrefs {
   opusKbps: 16 | 32 | 48; // Opus quality: payload kbit/s (16 low, 32 balanced, 48 full)
   ringtone: 'classic' | 'digital' | 'office' | 'silent';
   ringtoneVolume: number; // 0..1
+  whatsappSound: boolean; // chime when a WhatsApp chat is assigned to the agent
   ringtoneUri?: string; // device system ringtone (Android) — wins over synth type when set
 }
 

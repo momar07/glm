@@ -183,7 +183,12 @@ export function Settings(): React.ReactElement {
             <Field label="Microphone">
               <Select
                 value={settings.audio.inputDeviceId ?? ''}
-                onChange={(v) => setAudio({ inputDeviceId: v || undefined })}
+                onChange={(v) =>
+                  setAudio({
+                    inputDeviceId: v || undefined,
+                    inputDeviceLabel: v ? mics.find((d) => d.deviceId === v)?.label || undefined : undefined,
+                  })
+                }
                 options={[
                   { value: '', label: 'System default' },
                   ...mics.map((d) => ({ value: d.deviceId, label: d.label || 'mic' })),
@@ -205,7 +210,12 @@ export function Settings(): React.ReactElement {
             <Field label="Speaker output">
               <Select
                 value={settings.audio.outputDeviceId ?? ''}
-                onChange={(v) => setAudio({ outputDeviceId: v || undefined })}
+                onChange={(v) =>
+                  setAudio({
+                    outputDeviceId: v || undefined,
+                    outputDeviceLabel: v ? speakers.find((d) => d.deviceId === v)?.label || undefined : undefined,
+                  })
+                }
                 options={[
                   { value: '', label: 'System default' },
                   ...speakers.map((d) => ({ value: d.deviceId, label: d.label || 'speaker' })),
@@ -267,6 +277,11 @@ export function Settings(): React.ReactElement {
                 stop
               </button>
             </div>
+            <Toggle
+              checked={settings.audio.whatsappSound !== false}
+              onChange={(v) => setAudio({ whatsappSound: v })}
+              label="WhatsApp assignment sound"
+            />
             {phoneTones.length > 0 && (
               <Field label="Phone ringtone (overrides app sound)">
                 <Select

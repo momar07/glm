@@ -32,6 +32,10 @@ pub struct RegisterOptions {
     pub transport: Transport,
     /// The codecs in the order of the priority: "PCMA", "PCMU", "G729".
     pub codecs: Vec<String>,
+    /// The sound devices the agent picked, by name as the machine calls
+    /// them; None keeps the defaults of the system.
+    pub capture_device: Option<String>,
+    pub playback_device: Option<String>,
 }
 
 impl Default for RegisterOptions {
@@ -43,6 +47,8 @@ impl Default for RegisterOptions {
             password: String::new(),
             transport: Transport::Udp,
             codecs: vec!["PCMA".to_string(), "PCMU".to_string()],
+            capture_device: None,
+            playback_device: None,
         }
     }
 }

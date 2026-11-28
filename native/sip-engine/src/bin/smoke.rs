@@ -23,6 +23,7 @@ fn main() {
         password,
         transport: Transport::Udp,
         codecs: vec!["G729".to_string(), "PCMA".to_string(), "PCMU".to_string()],
+        ..Default::default()
     };
     match engine.register(options) {
         Ok(()) => println!("ok: the account is added"),
@@ -78,6 +79,18 @@ fn main() {
                 if active && answered && hangup_at.is_none() {
                     hangup_at = Some(Instant::now() + Duration::from_secs(3));
                 }
+            }
+            Ok(EngineEvent::Devices {
+                capture,
+                playback,
+                devices,
+            }) => {
+                println!(
+                    "sound devices: microphone={} speakers={} (available: {})",
+                    capture,
+                    playback,
+                    devices.join(" | ")
+                );
             }
             Ok(EngineEvent::Error { message }) => {
                 println!("FAIL: {}", message);

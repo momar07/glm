@@ -121,6 +121,41 @@ class AudioManager {
     }
   }
 
+  /** Short two-tone chime for a WhatsApp assignment (the toast is visual;
+   *  this is its sound). Best-effort like the DTMF feedback: a suspended
+   *  context resumes first, and any failure is swallowed. */
+  playNotification(volume = 0.22): void {
+    try {
+      const ctx = this.ensureCtx();
+      this.applySink();
+      if (ctx.state === 'suspended') {
+        void ctx.resume().then(() => this.playNotification(volume));
+        return;
+      }
+      const t = ctx.currentTime;
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      const notes: Array<[number, number]> = [
+        [1175, 0],
+        [1568, 0.14],
+      ];
+      for (const [freq, offset] of notes) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(t + offset);
+        osc.stop(t + offset + 0.13);
+      }
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(volume, t + 0.015);
+      gain.gain.setValueAtTime(volume, t + 0.22);
+      gain.gain.linearRampToValueAtTime(0, t + 0.28);
+    } catch {
+      /* ignore — the toast still shows */
+    }
+  }
+
   async listDevices(): Promise<DeviceInfo[]> {
     // Permissions must be granted before labels are exposed; request a throwaway stream first.
     try {

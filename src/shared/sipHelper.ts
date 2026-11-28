@@ -11,6 +11,10 @@ export type SipHelperCommand =
       password: string;
       transport: 'udp' | 'tcp' | 'tls';
       codecs?: string[];
+      // The agent's sound devices by name (the helper matches them
+      // against the machine's devices; absent = system defaults).
+      captureDevice?: string;
+      playbackDevice?: string;
     }
   | { cmd: 'unregister' }
   | { cmd: 'call'; target: string }
@@ -38,6 +42,7 @@ export type SipHelperEvent =
   | { event: 'callState'; callId: number; state: SipHelperCallState; text: string }
   | { event: 'media'; callId: number; active: boolean }
   | { event: 'codecs'; codecs: { id: string; priority: number }[] }
+  | { event: 'devices'; capture: string; playback: string; devices: string[] }
   | { event: 'error'; message: string };
 
 // What the main process sends to the renderer: the events of the helper plus

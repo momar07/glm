@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     opusKbps: 32,
     ringtone: 'classic',
     ringtoneVolume: 0.6,
+    whatsappSound: true,
   },
   ui: {
     theme: 'dark',

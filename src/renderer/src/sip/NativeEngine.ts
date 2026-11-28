@@ -130,6 +130,11 @@ export class NativeEngine {
         password: profile.password,
         transport: profile.transport ?? 'udp',
         codecs: nativeCodecPreference(this.settings),
+        // the sound devices the agent picked, by NAME (browser device
+        // ids are meaningless to the helper); it matches them against
+        // the machine's devices and falls back to the system defaults
+        captureDevice: this.settings?.audio?.inputDeviceLabel,
+        playbackDevice: this.settings?.audio?.outputDeviceLabel,
       });
       if (this._state === 'connecting') this.setState('registering');
     } catch (error) {
@@ -311,6 +316,14 @@ export class NativeEngine {
           'log',
           'info',
           `native codecs: ${event.codecs.map((c) => `${c.id}(${c.priority})`).join(', ')}`,
+        );
+        break;
+
+      case 'devices':
+        this.em.emit(
+          'log',
+          'info',
+          `native sound devices: microphone=${event.capture}, speakers=${event.playback} (available: ${event.devices.join(' | ') || 'none'})`,
         );
         break;
 

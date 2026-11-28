@@ -120,15 +120,18 @@ export function PhoneBar({
   // assignment (lastAssignedAt changes) and STAYS until the agent
   // clicks it (opens the chat) or dismisses it — since v5.35 an
   // assignment must never slip by unnoticed (a swept chat was lost
-  // to a 6-second auto-dismiss). Quiet by design — no sound, no
-  // focus steal; the ref guard keeps re-renders from re-toasting.
+  // to a 6-second auto-dismiss). No focus steal; the ref guard keeps
+  // re-renders from re-toasting. Since v5.37 the toast also CHIMES
+  // (the bar window only — the chat window shares the store but must
+  // not double the sound), unless the agent turned the sound off.
   const waToastSeenRef = useRef(0);
   useEffect(() => {
     if (!whatsapp.lastAssigned || whatsapp.lastAssignedAt <= 0) return;
     if (whatsapp.lastAssignedAt === waToastSeenRef.current) return;
     waToastSeenRef.current = whatsapp.lastAssignedAt;
     setWaToast(true);
-  }, [whatsapp.lastAssigned, whatsapp.lastAssignedAt]);
+    if (settings.audio.whatsappSound !== false) audioManager.playNotification();
+  }, [whatsapp.lastAssigned, whatsapp.lastAssignedAt, settings.audio.whatsappSound]);
 
   // The toast is a fixed overlay like the logout card: fit the window to
   // it in a layout effect, and shrink back the frame it disappears.

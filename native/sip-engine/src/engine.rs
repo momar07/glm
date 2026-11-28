@@ -63,6 +63,12 @@ pub enum EngineEvent {
     },
     /// The codecs of the engine and their priority.
     Codecs { codecs: Vec<(String, u8)> },
+    /// The sound devices of the machine and the ones in use.
+    Devices {
+        capture: String,
+        playback: String,
+        devices: Vec<String>,
+    },
     /// Something went wrong.
     Error { message: String },
 }
@@ -248,13 +254,9 @@ pub(crate) fn run(commands: Receiver<Command>, events: Sender<EngineEvent>) {
             return;
         }
 
-        // the sound device of the machine, there may be none (a server)
-        let mut capture: i32 = -1;
-        let mut playback: i32 = -1;
-        pjsua_get_snd_dev(&mut capture, &mut playback);
-        if capture < 0 || playback < 0 {
-            pjsua_set_null_snd_dev();
-        }
+        // the sound devices of the machine: the defaults of the system
+        // for now, the ones of the agent when the account registers
+        apply_sound_devices(None, None);
     }
 
     let mut account: Option<pjsua_acc_id> = None;
@@ -438,6 +440,11 @@ fn register(
     server: &mut String,
 ) -> Result<(), String> {
     unsafe {
+        // the sound devices of the agent, chosen in the settings by name
+        apply_sound_devices(
+            options.capture_device.as_deref(),
+            options.playback_device.as_deref(),
+        );
         // a second register (a reload of the window, a profile switch)
         // re-registers the existing account in place: deleting it first
         // would send an un-REGISTER and pjsua_acc_add would then fail on
@@ -536,6 +543,97 @@ fn call(
 
 /// PJSUA_CALL_MEDIA_ACTIVE: both directions of the audio are flowing.
 const PJSUA_CALL_MEDIA_ACTIVE: u32 = 1;
+
+/// The number of sound devices pjsua can hold here.
+const MAX_AUD_DEVICES: usize = 32;
+/// PJMEDIA_AUD_DEFAULT_CAPTURE_DEV, the microphone of the system.
+const DEFAULT_CAPTURE: pjmedia_aud_dev_id = -1;
+/// PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV, the speakers of the system.
+const DEFAULT_PLAYBACK: pjmedia_aud_dev_id = -2;
+
+/// The name of a sound device, as the machine calls it.
+fn device_name(info: &pjmedia_aud_dev_info) -> String {
+    unsafe { CStr::from_ptr(info.name.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
+}
+
+/// Chooses the sound devices and tells pjsua to use them.
+///
+/// The ids pjsua holds before a device is chosen are negative, and they
+/// are not an absence: -1 and -2 name the defaults of the system. An
+/// earlier version read them as "there is no device" and installed the
+/// null device at startup, which silenced every call and the ringtone
+/// for the whole life of the process. The devices are therefore
+/// enumerated: the one the agent picked (by name, from the settings)
+/// wins, the default of the system otherwise, and the null device is
+/// kept only for a machine with no sound device at all (a server).
+fn apply_sound_devices(want_capture: Option<&str>, want_playback: Option<&str>) {
+    unsafe {
+        let mut count: u32 = MAX_AUD_DEVICES as u32;
+        let mut infos: Vec<pjmedia_aud_dev_info> = vec![std::mem::zeroed(); MAX_AUD_DEVICES];
+        if pjsua_enum_aud_devs(infos.as_mut_ptr(), &mut count) != PJ_SUCCESS {
+            return;
+        }
+        infos.truncate(count as usize);
+        let devices: Vec<String> = infos.iter().map(device_name).collect();
+
+        // (the id to use, the name to report) for one direction; None
+        // when the machine has no device of that direction at all
+        let pick = |want: Option<&str>, output: bool| -> Option<(pjmedia_aud_dev_id, String)> {
+            let capable: Vec<&pjmedia_aud_dev_info> = infos
+                .iter()
+                .filter(|info| {
+                    if output {
+                        info.output_count > 0
+                    } else {
+                        info.input_count > 0
+                    }
+                })
+                .collect();
+            if capable.is_empty() {
+                return None;
+            }
+            if let Some(want) = want {
+                let want = want.to_lowercase();
+                if let Some(info) = capable
+                    .iter()
+                    .find(|info| device_name(info).to_lowercase().contains(&want))
+                {
+                    return Some((info.id, device_name(info)));
+                }
+            }
+            let fallback = if output { DEFAULT_PLAYBACK } else { DEFAULT_CAPTURE };
+            Some((fallback, "system default".to_string()))
+        };
+
+        match (pick(want_capture, false), pick(want_playback, true)) {
+            (Some((capture_id, capture_name)), Some((playback_id, playback_name))) => {
+                pjsua_set_snd_dev(capture_id, playback_id);
+                emit(EngineEvent::Devices {
+                    capture: capture_name,
+                    playback: playback_name,
+                    devices,
+                });
+            }
+            _ => {
+                // no sound device on this machine: the null device keeps
+                // the signalling alive, and the application is told why
+                // the calls will be silent
+                pjsua_set_null_snd_dev();
+                emit(EngineEvent::Devices {
+                    capture: "none".to_string(),
+                    playback: "none".to_string(),
+                    devices,
+                });
+                emit(EngineEvent::Error {
+                    message: "no sound device found on this machine — calls will be silent"
+                        .to_string(),
+                });
+            }
+        }
+    }
+}
 
 /// The priority of the codecs: the first one of the list wins, the others are
 /// switched off.
