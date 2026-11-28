@@ -622,9 +622,9 @@ export function PhoneBar({
               <button onClick={() => void window.api.minimize()} className="w-7 h-7 rounded-full hover:bg-white/10 text-slate-400 flex items-center justify-center transition" title="Minimize">
                 <span className="block w-3 border-t-2 border-current" />
               </button>
-              <button onClick={() => void window.api.quit()} className="w-7 h-7 rounded-full hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 flex items-center justify-center transition" title="Quit">
-                ✕
-              </button>
+              {/* No Quit (✕) button on the bar (owner's call): an
+                  accidental click used to exit the app outright.
+                  Minimize stays; quitting lives in the tray/menu. */}
             </div>
           </div>
         )}
@@ -1000,8 +1000,12 @@ export function PhoneBar({
       {/* ======================= LOGOUT CONFIRM ======================= */}
       {logoutOpen && (
         <>
+          {/* Backdrop is a click-catcher ONLY — it must stay
+              transparent: the bar window is transparent and grows
+              to fit this card, so any tint here paints a giant dark
+              rectangle over the desktop (the "big shadow"). */}
           <div
-            className="app-no-drag fixed inset-0 z-[60] bg-slate-950/60"
+            className="app-no-drag fixed inset-0 z-[60] bg-transparent"
             onClick={() => setLogoutOpen(false)}
           />
           <div className="fixed inset-x-0 top-[64px] z-[70] flex justify-center px-3 pointer-events-none">
