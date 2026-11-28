@@ -547,9 +547,9 @@ const PJSUA_CALL_MEDIA_ACTIVE: u32 = 1;
 /// The number of sound devices pjsua can hold here.
 const MAX_AUD_DEVICES: usize = 32;
 /// PJMEDIA_AUD_DEFAULT_CAPTURE_DEV, the microphone of the system.
-const DEFAULT_CAPTURE: pjmedia_aud_dev_id = -1;
+const DEFAULT_CAPTURE: i32 = -1;
 /// PJMEDIA_AUD_DEFAULT_PLAYBACK_DEV, the speakers of the system.
-const DEFAULT_PLAYBACK: pjmedia_aud_dev_id = -2;
+const DEFAULT_PLAYBACK: i32 = -2;
 
 /// The name of a sound device, as the machine calls it.
 fn device_name(info: &pjmedia_aud_dev_info) -> String {
@@ -580,7 +580,7 @@ fn apply_sound_devices(want_capture: Option<&str>, want_playback: Option<&str>) 
 
         // (the id to use, the name to report) for one direction; None
         // when the machine has no device of that direction at all
-        let pick = |want: Option<&str>, output: bool| -> Option<(pjmedia_aud_dev_id, String)> {
+        let pick = |want: Option<&str>, output: bool| -> Option<(i32, String)> {
             let capable: Vec<&pjmedia_aud_dev_info> = infos
                 .iter()
                 .filter(|info| {
