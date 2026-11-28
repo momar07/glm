@@ -240,18 +240,11 @@ export function WhatsAppChatApp(): React.ReactElement {
     if (transferDoneAt) setTransferOpen(false);
   }, [transferDoneAt]);
 
-  // Assignment banner (v5.35): a chat that lands on this agent while
-  // the window is open — above all one the sweep delivers — is
-  // announced here too, not only by the bar toast, and stays until
-  // opened or dismissed. The bar toast alone was missed in testing.
-  const [assignBannerAt, setAssignBannerAt] = useState(0);
-  useEffect(() => {
-    if (whatsapp.lastAssigned && whatsapp.lastAssignedAt > 0 && whatsapp.lastAssigned.id !== ticketId) {
-      setAssignBannerAt(whatsapp.lastAssignedAt);
-    }
-  }, [whatsapp.lastAssigned, whatsapp.lastAssignedAt, ticketId]);
-  const showAssignBanner =
-    !!whatsapp.lastAssigned && assignBannerAt === whatsapp.lastAssignedAt && whatsapp.lastAssigned.id !== ticketId;
+  // (The v5.35 in-window assignment banner was removed at the
+  // owner's order: it re-appeared for a ticket right after he closed
+  // it, because closing zeroes the open ticket and the banner's
+  // "not the open one" test flipped true. The bar's sticky toast is
+  // the assignment announcement.)
 
   // v5.32: after the pane is zeroed by a close / unassign / transfer,
   // do not immediately auto-select the next conversation — the agent
@@ -375,31 +368,6 @@ export function WhatsAppChatApp(): React.ReactElement {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0f172a] text-slate-100 overflow-hidden">
-      {showAssignBanner && whatsapp.lastAssigned && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-600/90 text-white text-[12px]">
-          <span className="flex-1 truncate">
-            New chat assigned to you: {whatsapp.lastAssigned.contactName || whatsapp.lastAssigned.phone}
-          </span>
-          <button
-            type="button"
-            className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 font-semibold"
-            onClick={() => {
-              setAssignBannerAt(0);
-              if (whatsapp.lastAssigned) void requestWhatsAppThread(whatsapp.lastAssigned.id);
-            }}
-          >
-            Open
-          </button>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/25"
-            onClick={() => setAssignBannerAt(0)}
-          >
-            ×
-          </button>
-        </div>
-      )}
       {/* Window frame bar (drag region) */}
       <div className="app-drag h-11 shrink-0 flex items-center gap-2 px-4 bg-[#1e293b] border-b border-[#334155] select-none">
         <WhatsAppGlyph className="w-4.5 h-4.5 w-[18px] h-[18px] text-emerald-400" />
